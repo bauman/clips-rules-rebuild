@@ -31,19 +31,15 @@ jobs:
         run:
           mkdir cmake-build-release ;
           cd cmake-build-release ;
-          cmake -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
+          cmake -DCMAKE_INSTALL_PREFIX=c:\usr  -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
           cmake --build . --target ALL_BUILD --config Release  ;
+          cmake --install .
           cd .. ;
           mkdir release-artifacts;
-          move cmake-build-release\Release\clips.dll release-artifacts  ;
-          move cmake-build-release\Release\clipscli.exe release-artifacts  ;
+          powershell -C  "&  Compress-Archive -Path C:\usr -DestinationPath release-artifacts\clips-$env:CI_COMMIT_SHORT_SHA.zip " ;
           cd release-artifacts  ;
-          dumpbin /dependents .\clipscli.exe  ;
+          dumpbin /dependents .\cmake-build-release\Release\clipscli.exe  ;
       - uses: actions/upload-artifact@v2
         with:
           name: release
           path: release-artifacts
-      - uses: actions/upload-artifact@v2
-        with:
-          name: debug
-          path: debug-artifacts
