@@ -14,8 +14,10 @@ jobs:
       - server2019
       - vs2019c
     steps:
+      - uses: actions/checkout@v2
       - name: build debug library
         run:
+          del /F /Q  cmake-build-debug  ;
           mkdir cmake-build-debug ;
           cd cmake-build-debug ;
           cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
