@@ -49,6 +49,6 @@ jobs:
           name: release
           path: release-artifacts
       - uses: actions/upload-artifact@v2
-          with:
-            name: clipspy-wheel
-            path: clipspy-0.3.3/dist/*.whl
+        with:
+          name: clipspy-wheel
+          path: clipspy-0.3.3/dist/*.whl
