@@ -39,3 +39,11 @@ jobs:
           move cmake-build-debug\Debug\clipscli.exe release-artifacts  ;
           cd release-artifacts  ;
           dumpbin /dependents .\clipscli.exe  ;
+      - uses: actions/upload-artifact@v2
+        with:
+          name: release
+          path: release-artifacts
+      - uses: actions/upload-artifact@v2
+        with:
+          name: debug
+          path: debug-artifacts
