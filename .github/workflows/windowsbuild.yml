@@ -35,8 +35,8 @@ jobs:
           cmake --build . --target ALL_BUILD --config Release  ;
           cd .. ;
           mkdir release-artifacts;
-          move cmake-build-debug\Debug\clips.dll release-artifacts  ;
-          move cmake-build-debug\Debug\clipscli.exe release-artifacts  ;
+          move cmake-build-release\Release\clips.dll release-artifacts  ;
+          move cmake-build-release\Release\clipscli.exe release-artifacts  ;
           cd release-artifacts  ;
           dumpbin /dependents .\clipscli.exe  ;
       - uses: actions/upload-artifact@v2
