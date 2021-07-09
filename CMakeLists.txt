@@ -529,7 +529,6 @@ else()
     target_link_libraries(clips m)
     target_link_libraries(clips-static m)
     add_executable(clipscli core/main.c)
-
 endif()
 
 
@@ -538,6 +537,11 @@ endif()
 
 if(WIN32)
     target_link_libraries(clipscli clips )
+    install(TARGETS clipscli clips
+            RUNTIME DESTINATION bin
+            LIBRARY DESTINATION lib)
+
+
 else()
     if(static-cli)
         set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
@@ -547,17 +551,17 @@ else()
     else()
         set(CMAKE_EXE_LINKER_FLAGS "-s")
         target_link_libraries(clipscli clips )
-
     endif()
+    install(FILES ${HEADER_FILES} DESTINATION include)
+    install(TARGETS clipscli clips clips-static
+            RUNTIME DESTINATION bin
+            LIBRARY DESTINATION lib
+            ARCHIVE DESTINATION lib/static)
 endif()
 
 
 
-install(FILES ${HEADER_FILES} DESTINATION include)
-install(TARGETS clipscli clips clips-static
-        RUNTIME DESTINATION bin
-        LIBRARY DESTINATION lib
-        ARCHIVE DESTINATION lib/static)
+
 
 enable_testing()
 
