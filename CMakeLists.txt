@@ -514,26 +514,30 @@ set(SOURCE_FILES
         core/modulpsr.h)
 
 
-add_library(clips SHARED ${SOURCE_FILES})
-add_library(clips-static ${SOURCE_FILES})
-set_target_properties(clips PROPERTIES LINK_FLAGS_RELEASE -s)
-set_target_properties(clips-static PROPERTIES LINK_FLAGS_RELEASE -s)
-
 
 if(WIN32)
+    add_library(clips SHARED core/main.c ${SOURCE_FILES})
     add_definitions(-DWIN_MVC=1)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+    add_executable(clipscli core/main.c)
+
 else()
+    add_library(clips SHARED ${SOURCE_FILES})
+    add_library(clips-static ${SOURCE_FILES})
+    set_target_properties(clips PROPERTIES LINK_FLAGS_RELEASE -s)
+    set_target_properties(clips-static PROPERTIES LINK_FLAGS_RELEASE -s)
     target_link_libraries(clips m)
     target_link_libraries(clips-static m)
+    add_executable(clipscli core/main.c)
+
 endif()
 
 
-add_executable(clipscli core/main.c)
+
 
 
 if(WIN32)
-
+    target_link_libraries(clipscli clips )
 else()
     if(static-cli)
         set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
