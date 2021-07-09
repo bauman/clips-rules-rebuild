@@ -18,11 +18,11 @@ jobs:
         run:
           mkdir cmake-build-debug ;
           cd cmake-build-debug ;
-          cmake --config Debug -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
+          cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
           cmake --build . --target ALL_BUILD --config Debug ;
       - name: build release library
         run:
           mkdir cmake-build-release ;
           cd cmake-build-release ;
-          cmake --config Release -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
+          cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
           cmake --build . --target ALL_BUILD --config Release  ;
