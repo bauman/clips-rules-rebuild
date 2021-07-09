@@ -521,7 +521,13 @@ if(WIN32)
     add_definitions(-DWIN_MVC=1)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
     add_executable(clipscli core/main.c)
-    target_link_libraries(clipscli clips )
+    if(static-cli)
+        set_property(TARGET clipscli PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")  # static link MSVC Runtime
+        target_link_libraries(clipscli clips-static )
+    else()
+        target_link_libraries(clipscli clips )
+    endif()
+
     install(TARGETS clipscli clips clips-static
             RUNTIME DESTINATION bin
             LIBRARY DESTINATION lib

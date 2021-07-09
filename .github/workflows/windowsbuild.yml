@@ -31,7 +31,7 @@ jobs:
         run:
           mkdir cmake-build-release ;
           cd cmake-build-release ;
-          cmake -DCMAKE_INSTALL_PREFIX=c:\usr  -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
+          cmake -Dstatic-cli=ON  -DCMAKE_INSTALL_PREFIX=c:\usr  -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
           cmake --build . --target ALL_BUILD --config Release  ;
           cmake --install .
           cd .. ;
