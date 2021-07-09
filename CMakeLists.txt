@@ -517,9 +517,15 @@ set(SOURCE_FILES
 
 if(WIN32)
     add_library(clips SHARED core/main.c ${SOURCE_FILES})
+    add_library(clips-static core/main.c ${SOURCE_FILES})
     add_definitions(-DWIN_MVC=1)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
     add_executable(clipscli core/main.c)
+    target_link_libraries(clipscli clips )
+    install(TARGETS clipscli clips clips-static
+            RUNTIME DESTINATION bin
+            LIBRARY DESTINATION lib
+            ARCHIVE DESTINATION lib/static)
 
 else()
     add_library(clips SHARED ${SOURCE_FILES})
@@ -529,20 +535,6 @@ else()
     target_link_libraries(clips m)
     target_link_libraries(clips-static m)
     add_executable(clipscli core/main.c)
-endif()
-
-
-
-
-
-if(WIN32)
-    target_link_libraries(clipscli clips )
-    install(TARGETS clipscli clips
-            RUNTIME DESTINATION bin
-            LIBRARY DESTINATION lib)
-
-
-else()
     if(static-cli)
         set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
         set(BUILD_SHARED_LIBS OFF)
@@ -558,6 +550,10 @@ else()
             LIBRARY DESTINATION lib
             ARCHIVE DESTINATION lib/static)
 endif()
+
+
+
+
 
 
 
