@@ -22,6 +22,11 @@ jobs:
           cmake -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
           cmake --build . --target ALL_BUILD --config Debug ;
           cd .. ;
+          mkdir debug-artifacts;
+          move cmake-build-debug\Debug\clips.dll debug-artifacts  ;
+          move cmake-build-debug\Debug\clipscli.exe debug-artifacts  ;
+          cd debug-artifacts  ;
+          dumpbin /dependents .\clipscli.exe  ;
       - name: build release library
         run:
           mkdir cmake-build-release ;
@@ -29,3 +34,8 @@ jobs:
           cmake -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
           cmake --build . --target ALL_BUILD --config Release  ;
           cd .. ;
+          mkdir release-artifacts;
+          move cmake-build-debug\Debug\clips.dll release-artifacts  ;
+          move cmake-build-debug\Debug\clipscli.exe release-artifacts  ;
+          cd release-artifacts  ;
+          dumpbin /dependents .\clipscli.exe  ;
