@@ -38,8 +38,17 @@ jobs:
           mkdir release-artifacts;
           powershell -C  "&  Compress-Archive -Path C:\usr -DestinationPath release-artifacts\clips-$env:CI_COMMIT_SHORT_SHA.zip " ;
           cd release-artifacts  ;
-          dumpbin /dependents .\cmake-build-release\Release\clipscli.exe  ;
+          dumpbin /dependents C:/usr/bin/clipscli.exe  ;
+      - name: build clipspy
+        run:
+          call c:\Python\condabin\activate.bat
+          cd clipspy-0.3.3
+          python setup.py bdist_wheel
       - uses: actions/upload-artifact@v2
         with:
           name: release
           path: release-artifacts
+      - uses: actions/upload-artifact@v2
+          with:
+            name: clipspy-wheel
+            path: clipspy-0.3.3/dist/*.whl
