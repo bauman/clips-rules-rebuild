@@ -41,9 +41,9 @@ jobs:
           dumpbin /dependents C:/usr/bin/clipscli.exe  ;
       - name: build clipspy
         run:
-          call c:\Python\condabin\activate.bat
-          cd clipspy-0.3.3
-          python setup.py bdist_wheel
+          call c:\Python\condabin\activate.bat ;
+          cd clipspy-0.3.3 ;
+          python setup.py bdist_wheel ;
       - uses: actions/upload-artifact@v2
         with:
           name: release
