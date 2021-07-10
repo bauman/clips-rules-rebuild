@@ -10,7 +10,8 @@ with open("lib/clips.cdef") as cdef_file:
 
 ffibuilder.set_source("_clips",
                       CLIPS_SOURCE,
-                      libraries=["clips"])
+                      libraries=["clips"],
+                      include_dirs=["../core"])
 
 ffibuilder.cdef(CLIPS_CDEF)
 
