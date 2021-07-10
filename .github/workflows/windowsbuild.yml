@@ -36,7 +36,7 @@ jobs:
           cmake --install . ;
           cd .. ;
           mkdir release-artifacts;
-          powershell -C  "&  Compress-Archive -Path C:\usr -DestinationPath release-artifacts\clips-$env:CI_COMMIT_SHORT_SHA.zip " ;
+          powershell -C  "&  Compress-Archive -Path C:\usr -DestinationPath release-artifacts\clips-$env:GITHUB_RUN_NUMBER.zip " ;
           cd release-artifacts  ;
           dumpbin /dependents C:/usr/bin/clipscli.exe  ;
       - name: build clipspy
