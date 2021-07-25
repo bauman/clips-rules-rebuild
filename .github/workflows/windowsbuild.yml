@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v2
       - name: build static 6.31 release
         run:
-          rd /S /Q c:/usr ;
+          Remove-Item -LiteralPath "c:/usr" -Force -Recurse -ErrorAction Ignore ;
           mkdir cmake-build-static-631-release ;
           cd cmake-build-static-631-release ;
           cmake -Dbuild-631=ON -Dstatic-cli=ON  -DCMAKE_INSTALL_PREFIX=c:\usr  -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
@@ -28,11 +28,11 @@ jobs:
           powershell -C  "&  Compress-Archive -Path C:\usr -DestinationPath release-artifacts\clips-static-631-$env:GITHUB_RUN_NUMBER.zip " ;
           cd release-artifacts  ;
           dumpbin /dependents C:/usr/bin/clipscli.exe  ;
-      - name: build static 6.40 release
+      - name: build dynamic 6.31 release
         run:
-          rd /S /Q c:/usr ;
-          mkdir cmake-build-dynamic-640-release ;
-          cd cmake-build-dynamic-640-release ;
+          Remove-Item -LiteralPath "c:/usr" -Force -Recurse -ErrorAction Ignore ;
+          mkdir cmake-build-dynamic-631-release ;
+          cd cmake-build-dynamic-631-release ;
           cmake -Dbuild-631=ON -Dstatic-cli=OFF -DCMAKE_INSTALL_PREFIX=c:\usr  -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
           cmake --build . --target ALL_BUILD --config Release  ;
           cmake --install . ;
@@ -43,7 +43,7 @@ jobs:
           dumpbin /dependents C:/usr/bin/clipscli.exe  ;
       - name: build static 6.40 release
         run:
-          rd /S /Q c:/usr ;
+          Remove-Item -LiteralPath "c:/usr" -Force -Recurse -ErrorAction Ignore ;
           mkdir cmake-build-static-640-release ;
           cd cmake-build-static-640-release ;
           cmake -Dstatic-cli=ON  -DCMAKE_INSTALL_PREFIX=c:\usr  -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
@@ -54,9 +54,9 @@ jobs:
           powershell -C  "&  Compress-Archive -Path C:\usr -DestinationPath release-artifacts\clips-static-640-$env:GITHUB_RUN_NUMBER.zip " ;
           cd release-artifacts  ;
           dumpbin /dependents C:/usr/bin/clipscli.exe  ;
-      - name: build static 6.40 release
+      - name: build dynamic 6.40 release
         run:
-          rd /S /Q c:/usr ;
+          Remove-Item -LiteralPath "c:/usr" -Force -Recurse -ErrorAction Ignore ;
           mkdir cmake-build-dynamic-640-release ;
           cd cmake-build-dynamic-640-release ;
           cmake -Dstatic-cli=OFF -DCMAKE_INSTALL_PREFIX=c:\usr  -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
