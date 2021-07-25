@@ -74,7 +74,8 @@ jobs:
         run:
           cd clipspy-1.0.0 ;
           python setup.py bdist_wheel ;
-          pip install dist/*.whl ;
+          cd dist ;
+          pip install --upgrade --force-reinstall *.whl ;
           cp c:\usr\bin\clips.dll c:\Python\Library\bin\clips.dll;
           python -c "import clips" ;
       - uses: actions/upload-artifact@v2
