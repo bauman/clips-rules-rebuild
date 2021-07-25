@@ -69,7 +69,7 @@ jobs:
       - name: build clipspy-1.0.0
         run:
           cd clipspy-1.0.0 ;
-          python setup.py bdist_wheel ;
+          python3 setup.py bdist_wheel ;
       - uses: actions/upload-artifact@v2
         with:
           name: release
