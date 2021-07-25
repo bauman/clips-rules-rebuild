@@ -71,8 +71,8 @@ jobs:
           cd clipspy-1.0.0 ;
           python3 setup.py bdist_wheel ;
           cd dist ;
-          pip3 install --upgrade --force-reinstall *.whl
-          python3 -c "import clips"
+          pip3 install --upgrade --force-reinstall *.whl ;
+          python3 -c "import clips" ;
       - uses: actions/upload-artifact@v2
         with:
           name: release
