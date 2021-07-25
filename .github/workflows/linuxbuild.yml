@@ -28,7 +28,7 @@ jobs:
           cd .. ;
           mkdir release-artifacts ;
           zip release-artifacts\clips-static-631-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/lib/libclips* /usr/lib/static/libclips* ;
-          ldd /usr/bin/clipscli  ;
+          file /usr/bin/clipscli  ;
       - name: build dynamic 6.31 release
         run:
           mkdir cmake-build-dynamic-631-release ;
@@ -39,7 +39,7 @@ jobs:
           cd .. ;
           mkdir release-artifacts ;
           zip release-artifacts\clips-static-631-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/lib/libclips* /usr/lib/static/libclips* ;
-          ldd /usr/bin/clipscli  ;
+          file /usr/bin/clipscli  ;
       - name: build clipspy-0.3.3
         run:
           cd clipspy-0.3.3 ;
@@ -54,7 +54,7 @@ jobs:
           cd .. ;
           mkdir release-artifacts ;
           zip release-artifacts\clips-static-631-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/lib/libclips* /usr/lib/static/libclips* ;
-          ldd /usr/bin/clipscli  ;
+          file /usr/bin/clipscli  ;
       - name: build dynamic 6.40 release
         run:
           mkdir cmake-build-dynamic-640-release ;
@@ -65,7 +65,7 @@ jobs:
           cd .. ;
           mkdir release-artifacts ;
           zip release-artifacts\clips-static-631-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/lib/libclips* /usr/lib/static/libclips* ;
-          ldd /usr/bin/clipscli  ;
+          file /usr/bin/clipscli  ;
       - name: build clipspy-1.0.0
         run:
           cd clipspy-1.0.0 ;
