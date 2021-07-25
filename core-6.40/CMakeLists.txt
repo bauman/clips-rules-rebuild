@@ -1,5 +1,3 @@
-# This follows along creating the objects identified in 
-# the makefiles included in the core-6.40 release
 
 set( SOURCE_FILES
   agenda.c
