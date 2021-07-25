@@ -1736,25 +1736,14 @@ if(WIN32)
     else()
         target_link_libraries(clipscli clips )
     endif()
+    install(TARGETS clipscli clips clips-static
+        RUNTIME DESTINATION bin
+        LIBRARY DESTINATION lib
+        ARCHIVE DESTINATION lib/static)
     
 else()
 
-    add_library(clips SHARED main.c ${SOURCE_FILES})
-    add_library(clips-static main.c ${SOURCE_FILES})
-    add_definitions(-DWIN_MVC=1)
-    add_definitions(-D_CRT_SECURE_NO_WARNINGS)
-    add_executable(clipscli main.c)
-
-
-    install(TARGETS clipscli clips clips-static
-            RUNTIME DESTINATION bin
-            LIBRARY DESTINATION lib
-            ARCHIVE DESTINATION lib/static)
-
-
-
-
-
+    
     add_library(clips SHARED ${SOURCE_FILES})
     add_library(clips-static ${SOURCE_FILES})
     set_target_properties(clips PROPERTIES LINK_FLAGS_RELEASE -s)
