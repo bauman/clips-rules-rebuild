@@ -24,7 +24,7 @@ jobs:
           cmake --build . --target ALL_BUILD --config Release  ;
           cmake --install . ;
           cd .. ;
-          mkdir release-artifacts;
+          md -Force release-artifacts ;
           powershell -C  "&  Compress-Archive -Path C:\usr -DestinationPath release-artifacts\clips-static-631-$env:GITHUB_RUN_NUMBER.zip " ;
           cd release-artifacts  ;
           dumpbin /dependents C:/usr/bin/clipscli.exe  ;
@@ -37,7 +37,7 @@ jobs:
           cmake --build . --target ALL_BUILD --config Release  ;
           cmake --install . ;
           cd .. ;
-          mkdir release-artifacts || echo already exists ;
+          md -Force release-artifacts  ;
           powershell -C  "&  Compress-Archive -Path C:\usr -DestinationPath release-artifacts\clips-dynamic-631-$env:GITHUB_RUN_NUMBER.zip " ;
           cd release-artifacts  ;
           dumpbin /dependents C:/usr/bin/clipscli.exe  ;
@@ -50,7 +50,7 @@ jobs:
           cmake --build . --target ALL_BUILD --config Release  ;
           cmake --install . ;
           cd .. ;
-          mkdir release-artifacts || echo already exists ;
+          md -Force release-artifacts  ;
           powershell -C  "&  Compress-Archive -Path C:\usr -DestinationPath release-artifacts\clips-static-640-$env:GITHUB_RUN_NUMBER.zip " ;
           cd release-artifacts  ;
           dumpbin /dependents C:/usr/bin/clipscli.exe  ;
@@ -63,7 +63,7 @@ jobs:
           cmake --build . --target ALL_BUILD --config Release  ;
           cmake --install . ;
           cd .. ;
-          mkdir release-artifacts || echo already exists;
+          md -Force release-artifacts  ;
           powershell -C  "&  Compress-Archive -Path C:\usr -DestinationPath release-artifacts\clips-dynamic-640-$env:GITHUB_RUN_NUMBER.zip " ;
           cd release-artifacts  ;
           dumpbin /dependents C:/usr/bin/clipscli.exe  ;
