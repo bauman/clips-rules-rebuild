@@ -23,23 +23,23 @@ jobs:
           mkdir cmake-build-static-631-release ;
           cd cmake-build-static-631-release ;
           cmake -Dbuild-631=ON -Dstatic-cli=ON  -DCMAKE_INSTALL_PREFIX=/usr   .. ;
-          cmake --build . --target ALL_BUILD --config Release  ;
+          cmake --build .  --config Release  ;
           sudo cmake --install . ;
           cd .. ;
           mkdir release-artifacts ;
-          zip release-artifacts\clips-static-631-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/lib/*clips* ;
-          ldd /usr/bin/clipscli.exe  ;
+          zip release-artifacts\clips-static-631-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/lib/libclips* /usr/lib/static/libclips* ;
+          ldd /usr/bin/clipscli  ;
       - name: build dynamic 6.31 release
         run:
           mkdir cmake-build-dynamic-631-release ;
           cd cmake-build-dynamic-631-release ;
           cmake -Dbuild-631=ON -Dstatic-cli=OFF -DCMAKE_INSTALL_PREFIX=/usr .. ;
-          cmake --build . --target ALL_BUILD --config Release  ;
+          cmake --build .  --config Release  ;
           sudo cmake --install . ;
           cd .. ;
           mkdir release-artifacts ;
-          zip release-artifacts\clips-static-631-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/lib/*clips* ;
-          ldd /usr/bin/clipscli.exe  ;
+          zip release-artifacts\clips-static-631-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/lib/libclips* /usr/lib/static/libclips* ;
+          ldd /usr/bin/clipscli  ;
       - name: build clipspy-0.3.3
         run:
           cd clipspy-0.3.3 ;
@@ -49,23 +49,23 @@ jobs:
           mkdir cmake-build-static-640-release ;
           cd cmake-build-static-640-release ;
           cmake -Dstatic-cli=ON  -DCMAKE_INSTALL_PREFIX=/usr .. ;
-          cmake --build . --target ALL_BUILD --config Release  ;
+          cmake --build .  --config Release  ;
           sudo cmake --install . ;
           cd .. ;
           mkdir release-artifacts ;
-          zip release-artifacts\clips-static-631-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/lib/*clips* ;
-          ldd /usr/bin/clipscli.exe  ;
+          zip release-artifacts\clips-static-631-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/lib/libclips* /usr/lib/static/libclips* ;
+          ldd /usr/bin/clipscli  ;
       - name: build dynamic 6.40 release
         run:
           mkdir cmake-build-dynamic-640-release ;
           cd cmake-build-dynamic-640-release ;
           cmake -Dstatic-cli=OFF -DCMAKE_INSTALL_PREFIX=/usr .. ;
-          cmake --build . --target ALL_BUILD --config Release  ;
+          cmake --build .  --config Release  ;
           sudo cmake --install . ;
           cd .. ;
           mkdir release-artifacts ;
-          zip release-artifacts\clips-static-631-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/lib/*clips* ;
-          ldd /usr/bin/clipscli.exe  ;
+          zip release-artifacts\clips-static-631-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/lib/libclips* /usr/lib/static/libclips* ;
+          ldd /usr/bin/clipscli  ;
       - name: build clipspy-1.0.0
         run:
           cd clipspy-1.0.0 ;
