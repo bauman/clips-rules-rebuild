@@ -1724,8 +1724,10 @@ add_library(  watch ${SOURCE_WATCH}  )
 if(WIN32)
     add_definitions(-DWIN_MVC=1)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+    
     add_library(  clips SHARED  x.c)
     target_link_libraries(clips agenda analysis argacces bload bmathfun bsave classcom classexm classfun classinf classini classpsr clsltpsr commline conscomp constrct constrnt crstrtgy cstrcbin cstrccom cstrcpsr cstrnbin cstrnchk cstrncmp cstrnops cstrnpsr cstrnutl default defins developr dffctbin dffctbsc dffctcmp dffctdef dffctpsr dffnxbin dffnxcmp dffnxexe dffnxfun dffnxpsr dfinsbin dfinscmp drive emathfun engine envrnbld envrnmnt evaluatn expressn exprnbin exprnops exprnpsr extnfunc factbin factbld factcmp factcom factfile factfun factgen facthsh factlhs factmch factmngr factprt factqpsr factqury factrete factrhs filecom filertr fileutil generate genrcbin genrccmp genrccom genrcexe genrcfun genrcpsr globlbin globlbsc globlcmp globlcom globldef globlpsr immthpsr incrrset inherpsr inscom insfile insfun insmngr insmoddp insmult inspsr insquery insqypsr iofun lgcldpnd main memalloc miscfun modulbin modulbsc modulcmp moduldef modulpsr modulutl msgcom msgfun msgpass msgpsr multifld multifun objbin objcmp objrtbin objrtbld objrtcmp objrtfnx objrtgen objrtmch parsefun pattern pprint prccode prcdrfun prcdrpsr prdctfun prntutil proflfun reorder reteutil retract router rulebin rulebld rulebsc rulecmp rulecom rulecstr ruledef ruledlt rulelhs rulepsr scanner sortfun strngfun strngrtr symblbin symblcmp symbol sysdep textpro tmpltbin tmpltbsc tmpltcmp tmpltdef tmpltfun tmpltlhs tmpltpsr tmpltrhs tmpltutl userdata userfunctions utility watch)
+    
     add_library(  clips-static  x.c )
     target_link_libraries(clips-static agenda analysis argacces bload bmathfun bsave classcom classexm classfun classinf classini classpsr clsltpsr commline conscomp constrct constrnt crstrtgy cstrcbin cstrccom cstrcpsr cstrnbin cstrnchk cstrncmp cstrnops cstrnpsr cstrnutl default defins developr dffctbin dffctbsc dffctcmp dffctdef dffctpsr dffnxbin dffnxcmp dffnxexe dffnxfun dffnxpsr dfinsbin dfinscmp drive emathfun engine envrnbld envrnmnt evaluatn expressn exprnbin exprnops exprnpsr extnfunc factbin factbld factcmp factcom factfile factfun factgen facthsh factlhs factmch factmngr factprt factqpsr factqury factrete factrhs filecom filertr fileutil generate genrcbin genrccmp genrccom genrcexe genrcfun genrcpsr globlbin globlbsc globlcmp globlcom globldef globlpsr immthpsr incrrset inherpsr inscom insfile insfun insmngr insmoddp insmult inspsr insquery insqypsr iofun lgcldpnd main memalloc miscfun modulbin modulbsc modulcmp moduldef modulpsr modulutl msgcom msgfun msgpass msgpsr multifld multifun objbin objcmp objrtbin objrtbld objrtcmp objrtfnx objrtgen objrtmch parsefun pattern pprint prccode prcdrfun prcdrpsr prdctfun prntutil proflfun reorder reteutil retract router rulebin rulebld rulebsc rulecmp rulecom rulecstr ruledef ruledlt rulelhs rulepsr scanner sortfun strngfun strngrtr symblbin symblcmp symbol sysdep textpro tmpltbin tmpltbsc tmpltcmp tmpltdef tmpltfun tmpltlhs tmpltpsr tmpltrhs tmpltutl userdata userfunctions utility watch)
     add_executable(clipscli main.c)
@@ -1736,6 +1738,7 @@ if(WIN32)
     else()
         target_link_libraries(clipscli clips )
     endif()
+    
     install(TARGETS clipscli clips clips-static
         RUNTIME DESTINATION bin
         LIBRARY DESTINATION lib
