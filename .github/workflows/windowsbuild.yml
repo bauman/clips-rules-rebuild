@@ -51,6 +51,7 @@ jobs:
           cd cmake-build-static-640-release ;
           cmake -Dstatic-cli=ON  -DCMAKE_INSTALL_PREFIX=c:\usr  -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
           cmake --build . --target ALL_BUILD --config Release  ;
+          ctest ; 
           cmake --install . ;
           cd .. ;
           md -Force release-artifacts  ;
@@ -64,6 +65,7 @@ jobs:
           cd cmake-build-dynamic-640-release ;
           cmake -Dstatic-cli=OFF -DCMAKE_INSTALL_PREFIX=c:\usr  -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
           cmake --build . --target ALL_BUILD --config Release  ;
+          ctest ; 
           cmake --install . ;
           cd .. ;
           md -Force release-artifacts  ;

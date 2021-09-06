@@ -1,4 +1,3 @@
-
 set( SOURCE_FILES
   agenda.c
   analysis.c
