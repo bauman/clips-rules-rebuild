@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.3)
 project(clips)
-INCLUDE_DIRECTORIES(/usr/include/ core-6.31/ )
+INCLUDE_DIRECTORIES(/usr/include/ )
 LINK_DIRECTORIES(/usr/lib64/)
 
 option(static-cli "statically compile CLI" OFF)
@@ -15,4 +15,10 @@ endif()
 
 enable_testing()
 
+
+if (build-631)
+	# there are no 6.31 tests
+else()
+	add_subdirectory ("test-core-6.40")
+endif()
 
