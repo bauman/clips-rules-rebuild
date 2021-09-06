@@ -12,6 +12,7 @@ if (build-631)
 else()
 	INCLUDE_DIRECTORIES(/usr/include/ core-6.40/ )
 	LINK_DIRECTORIES(/usr/lib64/)
+
 	add_subdirectory ("core-6.40")
 endif()
 
