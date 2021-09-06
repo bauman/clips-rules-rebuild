@@ -32,6 +32,12 @@ add_executable(005_UDF  005_UserDefinedFunction.c)
 target_link_libraries(005_UDF clips-static )
 add_test(005_UDF 005_UDF)
 
+add_executable(006_UDFRT  006_UserDefinedFunction_Runtime.c)
+target_link_libraries(006_UDFRT clips-static )
+add_test(006_UDFRT 006_UDFRT)
+
+
+
 if (WIN32)
 	# tests that only work on windows
 

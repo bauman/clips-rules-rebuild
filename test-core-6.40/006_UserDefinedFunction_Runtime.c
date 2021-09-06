@@ -3,13 +3,15 @@
 
 
 void Cube(
-	Environment * env,
-	UDFContext * udfc,
-	UDFValue * out)
+	Environment* env,
+	UDFContext* udfc,
+	UDFValue* out)
 {
 	UDFValue theArg;
-	// Retrieve the first argument.
-	if (!UDFFirstArgument(udfc, NUMBER_BITS, &theArg))
+	// under this method, the first argument is the function name, 
+	//		the second and on are the actual args
+	// Retrieve the second argument.
+	if (!UDFNthArgument(udfc, 2, NUMBER_BITS, &theArg))
 	{
 		return;
 	}
@@ -28,10 +30,35 @@ void Cube(
 	}
 }
 
+void Dispatcher(
+	Environment * env,
+	UDFContext * udfc,
+	UDFValue * out)
+{
+	/* 
+	* Credit: Matteo Cafasso from clipspy for original implementation for runtime
+	*	This runtime dispatch system is modeled after clipspy python-function
+	*	addudf will point to this router function, which can use runtime system to sort out where to actually dispatch to
+	*	every custom function should route to here where the first argument is the lookup name of the actual function to call
+	*/
+
+
+	// The first argument is the function name
+	// need to maintain internal mapping of name to functions
+	UDFValue theArg;
+	UDFFirstArgument(udfc, STRING_BIT | SYMBOL_BIT, &theArg);
+
+	//   This should be implemented as a switch / dict / lookup 
+	if (strncmp(theArg.lexemeValue->contents, "cube", 4) == 0) {
+		Cube(env, udfc, out);
+	}
+	
+}
+
 void UserFunctions(
 	Environment* env)
 {
-	AddUDFError adderr = AddUDF(env, "cube", "ld", 1, 1, "ld", Cube, "Cube", NULL);
+	AddUDFError adderr = AddUDF(env, "Dispatch", "*", 1, UNBOUNDED, "*", Dispatcher, "Dispatch", NULL);
 }
 
 
@@ -59,6 +86,12 @@ int main(
 			"    (slot cubedf (type FLOAT))"
 			"    (slot cubedi (type INTEGER))"
 			")");
+
+		// run the cube'd clips function through the C Dispatcher
+		build_result += Build(theEnv, ""
+			"(deffunction cube ($?args)"
+			"	(Dispatch cube (expand$ ?args)))");
+
 		build_result += Build(theEnv, ""
 			"(defrule dothemath"
 			"   ?d <- (maths (basei ?bi) (basef ?bf))"
@@ -82,7 +115,7 @@ int main(
 		Fact* n = GetNextFact(theEnv, NULL);
 		while (n) {
 			post_run_facts++;
-			new_rule_fired = strncmp(n->whichDeftemplate->header.name->contents, "maths", 5); // animal must still be there
+			new_rule_fired = strncmp(n->whichDeftemplate->header.name->contents, "maths", 6); // animal must still be there
 			GetSlotError gse = GetFactSlot(n, "cubedi", &returnValue);
 			if (returnValue.integerValue->contents != 2 * 2 * 2) {
 				new_rule_fired += 1;  // whatever, just note the error
