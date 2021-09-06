@@ -28,6 +28,10 @@ target_link_libraries(004_TemplateFact clips-static )
 add_test(004_TemplateFact 004_TemplateFact)
 
 
+add_executable(005_UDF  005_UserDefinedFunction.c)
+target_link_libraries(005_UDF clips-static )
+add_test(005_UDF 005_UDF)
+
 if (WIN32)
 	# tests that only work on windows
 

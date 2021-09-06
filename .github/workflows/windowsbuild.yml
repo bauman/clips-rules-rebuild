@@ -78,7 +78,7 @@ jobs:
           pip uninstall -y clipspy;
           pip install dist/clipspy-1.0.0-cp38-cp38-win_amd64.whl ;
           cp c:\usr\bin\clips.dll c:\Python\Library\bin\clips.dll;
-          cd ..
+          cd .. ;
           python -c "import clips" ;
       - uses: actions/upload-artifact@v2
         with:
