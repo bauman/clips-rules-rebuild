@@ -75,7 +75,8 @@ jobs:
           cd clipspy-1.0.0 ;
           python setup.py bdist_wheel ;
           dir  dist ;
-          pip install --upgrade --force-reinstall dist/clipspy-1.0.0-cp38-cp38-win_amd64.whl ;
+          pip uninstall -y clipspy;
+          pip install dist/clipspy-1.0.0-cp38-cp38-win_amd64.whl ;
           cp c:\usr\bin\clips.dll c:\Python\Library\bin\clips.dll;
           cd ..
           python -c "import clips" ;
