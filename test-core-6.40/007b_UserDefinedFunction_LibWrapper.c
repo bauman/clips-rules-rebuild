@@ -18,7 +18,6 @@ void Dispatcher(
     *	every custom function should route to here where the first argument is the lookup name of the actual function to call
     */
 
-
     // The first argument is the function name
     // need to maintain internal mapping of name to functions
     UDFValue theArg;
@@ -36,8 +35,18 @@ void Dispatcher(
             }
             dlclose(so);
         }
+    } else if (strncmp(theArg.lexemeValue->contents, "square", 5) == 0) {
+        void* so = dlopen("./libUDFRTlib2007.so", RTLD_NOW);
+        if (!so) {
+            printf("%s\n", dlerror());
+        }else {
+            Dispatched Square = (Dispatched) dlsym(so, "Square");
+            if(Square){
+                Square(env, udfc, out);
+            }
+            dlclose(so);
+        }
     }
-
 }
 
 void UserFunctions(
@@ -66,8 +75,11 @@ int main(
 
         build_result = Build(theEnv, ""
                                      "(deftemplate maths"
+                                     "    (slot done (type SYMBOL) (default no))"
                                      "    (slot basei (type INTEGER))"
                                      "    (slot basef (type FLOAT))"
+                                     "    (slot squaredf (type FLOAT))"
+                                     "    (slot squaredi (type INTEGER))"
                                      "    (slot cubedf (type FLOAT))"
                                      "    (slot cubedi (type INTEGER))"
                                      ")");
@@ -76,14 +88,20 @@ int main(
         build_result += Build(theEnv, ""
                                       "(deffunction cube ($?args)"
                                       "	(Dispatch cube (expand$ ?args)))");
+        build_result += Build(theEnv, ""
+                                      "(deffunction square ($?args)"
+                                      "	(Dispatch square (expand$ ?args)))");
 
         build_result += Build(theEnv, ""
                                       "(defrule dothemath"
-                                      "   ?d <- (maths (basei ?bi) (basef ?bf))"
+                                      "   ?d <- (maths (basei ?bi) (basef ?bf) (done no))"
                                       "   =>"
                                       "   (modify ?d "
+                                      "          (squaredf (square ?bf)) "
+                                      "          (squaredi (square ?bi))"
                                       "          (cubedf (cube ?bf)) "
                                       "          (cubedi (cube ?bi))"
+                                      "          (done yes)"
                                       "   )"
                                       " )");
 
@@ -102,23 +120,32 @@ int main(
             post_run_facts++;
             new_rule_fired = strncmp(n->whichDeftemplate->header.name->contents, "maths", 5); // animal must still be there
             GetSlotError gse = GetFactSlot(n, "cubedi", &returnValue);
-            if (returnValue.integerValue->contents != 2 * 2 * 2) {
-                new_rule_fired += 1;  // whatever, just note the error
+            if(!gse){
+                if (returnValue.integerValue->contents != 2 * 2 * 2) {
+                    new_rule_fired += 1;  // whatever, just note the error
+                }
             }
             gse = GetFactSlot(n, "cubedf", &returnValue);
-            double expectedf = 2.7 * 2.7 * 2.7;
-            if (returnValue.floatValue->contents - expectedf > 0.1 || returnValue.floatValue->contents - expectedf < -0.1) {
-                new_rule_fired += 1;  // whatever, just note the error
+            if (!gse){
+                double expectedf = 2.7 * 2.7 * 2.7;
+                if (returnValue.floatValue->contents - expectedf > 0.1 || returnValue.floatValue->contents - expectedf < -0.1) {
+                    new_rule_fired += 1;  // whatever, just note the error
+                }
+            }
+            gse = GetFactSlot(n, "squaredi", &returnValue);
+            if (!gse){
+                if (returnValue.integerValue->contents != 2 * 2 ) {
+                    new_rule_fired += 1;  // whatever, just note the error
+                }
             }
             n = GetNextFact(theEnv, n);
         }
-
         destroy_success = DestroyEnvironment(theEnv);
     }
 
     if (theEnv &&  /* environment works */
         build_result == 0 && /* build worked */
-        rules_fired == 2 && /* should fire the stdout print and the quacking facts */
+        rules_fired == 1 && /* should fire the stdout print and the quacking facts */
         new_rule_fired == 0 && /* this is the check that the expected fact slot is quack */
         post_run_facts == 1 && /* the rules should have removed the intermediate facts */
         destroy_success /* teardown should have reported complete without errors */) {

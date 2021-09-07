@@ -117,13 +117,18 @@ int main(
 			post_run_facts++;
 			new_rule_fired = strncmp(n->whichDeftemplate->header.name->contents, "maths", 5); // animal must still be there
 			GetSlotError gse = GetFactSlot(n, "cubedi", &returnValue);
-			if (returnValue.integerValue->contents != 2 * 2 * 2) {
-				new_rule_fired += 1;  // whatever, just note the error
+			if(!gse){
+                if (returnValue.integerValue->contents != 2 * 2 * 2) {
+                    new_rule_fired += 1;  // whatever, just note the error
+                }
 			}
+
 			gse = GetFactSlot(n, "cubedf", &returnValue);
-			double expectedf = 2.7 * 2.7 * 2.7;
-			if (returnValue.floatValue->contents - expectedf > 0.1 || returnValue.floatValue->contents - expectedf < -0.1) {
-				new_rule_fired += 1;  // whatever, just note the error
+			if (!gse){
+                double expectedf = 2.7 * 2.7 * 2.7;
+                if (returnValue.floatValue->contents - expectedf > 0.1 || returnValue.floatValue->contents - expectedf < -0.1) {
+                    new_rule_fired += 1;  // whatever, just note the error
+                }
 			}
 			n = GetNextFact(theEnv, n);
 		}
