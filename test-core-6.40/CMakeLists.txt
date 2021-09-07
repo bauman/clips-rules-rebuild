@@ -43,6 +43,11 @@ if (WIN32)
 
 else ()
 	#tests that only work on posix
+	add_library(UDFRTlib007 SHARED 007a_UserDefinedFunction_Lib.c)
+	target_link_libraries(UDFRTlib007 clips)
+	add_executable(007_UDFRT_LW  007b_UserDefinedFunction_LibWrapper.c)
+	target_link_libraries(007_UDFRT_LW clips dl)
+	add_test(007_UDFRT_LW 007_UDFRT_LW)
 endif()
 
 

@@ -61,6 +61,7 @@ jobs:
           cd cmake-build-dynamic-640-release ;
           cmake -Dstatic-cli=OFF -DCMAKE_INSTALL_PREFIX=/usr .. ;
           cmake --build .  --config Release  ;
+          ctest;
           sudo cmake --install . ;
           cd .. ;
           mkdir -p release-artifacts ;

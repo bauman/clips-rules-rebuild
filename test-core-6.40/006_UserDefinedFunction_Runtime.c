@@ -105,17 +105,17 @@ int main(
 		Reset(theEnv);
 		
 		theFB = CreateFactBuilder(theEnv, "maths");
-		FBPutSlotCLIPSLexeme(theFB, "basef", CreateFloat(theEnv, 2.7));
-		FBPutSlotCLIPSLexeme(theFB, "basei", CreateInteger(theEnv, 2));
+		FBPutSlotCLIPSFloat(theFB, "basef", CreateFloat(theEnv, 2.7));
+		FBPutSlotCLIPSInteger(theFB, "basei", CreateInteger(theEnv, 2));
 		FBAssert(theFB);
 		FBDispose(theFB);
 		
-		rules_fired = Run(theEnv, -1);
+		rules_fired = (int)Run(theEnv, -1);
 		
 		Fact* n = GetNextFact(theEnv, NULL);
 		while (n) {
 			post_run_facts++;
-			new_rule_fired = strncmp(n->whichDeftemplate->header.name->contents, "maths", 6); // animal must still be there
+			new_rule_fired = strncmp(n->whichDeftemplate->header.name->contents, "maths", 5); // animal must still be there
 			GetSlotError gse = GetFactSlot(n, "cubedi", &returnValue);
 			if (returnValue.integerValue->contents != 2 * 2 * 2) {
 				new_rule_fired += 1;  // whatever, just note the error
