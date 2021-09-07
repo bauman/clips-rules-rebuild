@@ -72,12 +72,12 @@ int main(
 		Reset(theEnv);
 		
 		theFB = CreateFactBuilder(theEnv, "maths");
-		FBPutSlotCLIPSLexeme(theFB, "basef", CreateFloat(theEnv, 2.7));
-		FBPutSlotCLIPSLexeme(theFB, "basei", CreateInteger(theEnv, 2));
+		FBPutSlotCLIPSFloat(theFB, "basef", CreateFloat(theEnv, 2.7));
+		FBPutSlotCLIPSInteger(theFB, "basei", CreateInteger(theEnv, 2));
 		FBAssert(theFB);
 		FBDispose(theFB);
 		
-		rules_fired = Run(theEnv, -1);
+		rules_fired = (int)Run(theEnv, -1);
 		
 		Fact* n = GetNextFact(theEnv, NULL);
 		while (n) {
