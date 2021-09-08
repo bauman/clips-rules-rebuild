@@ -77,7 +77,7 @@ jobs:
       - uses: actions/upload-artifact@v2
         with:
           name: release
-          path: release-artifacts\
+          path: release-artifacts/*.zip
       - uses: actions/upload-artifact@v2
         with:
           name: clipspy-0.3.3-wheel
