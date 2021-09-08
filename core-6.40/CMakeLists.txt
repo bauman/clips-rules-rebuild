@@ -169,7 +169,182 @@ set( SOURCE_FILES
   watch.c
 )
 
-
+set (HEADER_FILES
+        agenda.h
+        analysis.h
+        argacces.h
+        bload.h
+        bmathfun.h
+        bsave.h
+        classcom.h
+        classexm.h
+        classfun.h
+        classinf.h
+        classini.h
+        classpsr.h
+        clips.h
+        clsltpsr.h
+        commline.h
+        conscomp.h
+        constant.h
+        constrct.h
+        constrnt.h
+        crstrtgy.h
+        cstrcbin.h
+        cstrccmp.h
+        cstrccom.h
+        cstrcpsr.h
+        cstrnbin.h
+        cstrnchk.h
+        cstrncmp.h
+        cstrnops.h
+        cstrnpsr.h
+        cstrnutl.h
+        default.h
+        defins.h
+        developr.h
+        dffctbin.h
+        dffctbsc.h
+        dffctcmp.h
+        dffctdef.h
+        dffctpsr.h
+        dffnxbin.h
+        dffnxcmp.h
+        dffnxexe.h
+        dffnxfun.h
+        dffnxpsr.h
+        dfinsbin.h
+        dfinscmp.h
+        drive.h
+        emathfun.h
+        engine.h
+        entities.h
+        envrnbld.h
+        envrnmnt.h
+        evaluatn.h
+        expressn.h
+        exprnbin.h
+        exprnops.h
+        exprnpsr.h
+        extnfunc.h
+        factbin.h
+        factbld.h
+        factcmp.h
+        factcom.h
+        factfile.h
+        factfun.h
+        factgen.h
+        facthsh.h
+        factlhs.h
+        factmch.h
+        factmngr.h
+        factprt.h
+        factqpsr.h
+        factqury.h
+        factrete.h
+        factrhs.h
+        filecom.h
+        filertr.h
+        fileutil.h
+        generate.h
+        genrcbin.h
+        genrccmp.h
+        genrccom.h
+        genrcexe.h
+        genrcfun.h
+        genrcpsr.h
+        globlbin.h
+        globlbsc.h
+        globlcmp.h
+        globlcom.h
+        globldef.h
+        globlpsr.h
+        immthpsr.h
+        incrrset.h
+        inherpsr.h
+        inscom.h
+        insfile.h
+        insfun.h
+        insmngr.h
+        insmoddp.h
+        insmult.h
+        inspsr.h
+        insquery.h
+        insqypsr.h
+        iofun.h
+        lgcldpnd.h
+        match.h
+        memalloc.h
+        miscfun.h
+        modulbin.h
+        modulbsc.h
+        modulcmp.h
+        moduldef.h
+        modulpsr.h
+        modulutl.h
+        msgcom.h
+        msgfun.h
+        msgpass.h
+        msgpsr.h
+        multifld.h
+        multifun.h
+        network.h
+        objbin.h
+        objcmp.h
+        object.h
+        objrtbin.h
+        objrtbld.h
+        objrtcmp.h
+        objrtfnx.h
+        objrtgen.h
+        objrtmch.h
+        parsefun.h
+        pattern.h
+        pprint.h
+        prccode.h
+        prcdrfun.h
+        prcdrpsr.h
+        prdctfun.h
+        prntutil.h
+        proflfun.h
+        reorder.h
+        reteutil.h
+        retract.h
+        router.h
+        rulebin.h
+        rulebld.h
+        rulebsc.h
+        rulecmp.h
+        rulecom.h
+        rulecstr.h
+        ruledef.h
+        ruledlt.h
+        rulelhs.h
+        rulepsr.h
+        scanner.h
+        setup.h
+        sortfun.h
+        strngfun.h
+        strngrtr.h
+        symblbin.h
+        symblcmp.h
+        symbol.h
+        sysdep.h
+        textpro.h
+        tmpltbin.h
+        tmpltbsc.h
+        tmpltcmp.h
+        tmpltdef.h
+        tmpltfun.h
+        tmpltlhs.h
+        tmpltpsr.h
+        tmpltrhs.h
+        tmpltutl.h
+        userdata.h
+        usrsetup.h
+        utility.h
+        watch.h
+        )
 if(WIN32)
     add_definitions(-DWIN_MVC=1)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
@@ -184,7 +359,7 @@ if(WIN32)
     else()
         target_link_libraries(clipscli clips )
     endif()
-    
+    install(FILES ${HEADER_FILES} DESTINATION include/clips-640)
     install(TARGETS clipscli clips clips-static
         RUNTIME DESTINATION bin
         LIBRARY DESTINATION lib
@@ -209,7 +384,7 @@ else()
         set(CMAKE_EXE_LINKER_FLAGS "-s")
         target_link_libraries(clipscli clips )
     endif()
-    install(FILES ${HEADER_FILES} DESTINATION include)
+    install(FILES ${HEADER_FILES} DESTINATION include/clips-640)
     install(TARGETS clipscli clips clips-static
             RUNTIME DESTINATION bin
             LIBRARY DESTINATION lib
