@@ -27,7 +27,7 @@ jobs:
           sudo cmake --install . ;
           cd .. ;
           mkdir -p release-artifacts ;
-          zip release-artifacts\clips-static-631-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/lib/libclips* /usr/lib/static/libclips* ;
+          zip release-artifacts/clips-static-631-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/lib/libclips* /usr/lib/static/libclips* ;
           file /usr/bin/clipscli  ;
       - name: build dynamic 6.31 release
         run:
@@ -53,7 +53,7 @@ jobs:
           sudo cmake --install . ;
           cd .. ;
           mkdir -p release-artifacts ;
-          zip release-artifacts/clips-static-640-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/include/clips/*.h /usr/lib/libclips* /usr/lib/static/libclips* ;
+          zip release-artifacts/clips-static-640-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/include/clips-640/*.h /usr/lib/libclips* /usr/lib/static/libclips* ;
           file /usr/bin/clipscli  ;
       - name: build dynamic 6.40 release
         run:
@@ -65,7 +65,7 @@ jobs:
           sudo cmake --install . ;
           cd .. ;
           mkdir -p release-artifacts ;
-          zip release-artifacts/clips-640-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/include/clips/*.h /usr/lib/libclips* /usr/lib/static/libclips* ;
+          zip release-artifacts/clips-640-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/include/clips-640/*.h /usr/lib/libclips* /usr/lib/static/libclips* ;
           file /usr/bin/clipscli  ;
       - name: build clipspy-1.0.0
         run:
