@@ -64,6 +64,7 @@ jobs:
           cd cmake-build-dynamic-640-release ;
           cmake -Dstatic-cli=OFF -DCMAKE_INSTALL_PREFIX=c:\usr  -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
           cmake --build . --target ALL_BUILD --config Release  ;
+          ctest;
           cmake --install . ;
           cd .. ;
           md -Force release-artifacts  ;
@@ -74,9 +75,11 @@ jobs:
         run:
           cd clipspy-1.0.0 ;
           python setup.py bdist_wheel ;
-          cd dist ;
-          pip install --upgrade --force-reinstall *.whl ;
+          dir  dist ;
+          pip uninstall -y clipspy;
+          pip install dist/clipspy-1.0.0-cp38-cp38-win_amd64.whl ;
           cp c:\usr\bin\clips.dll c:\Python\Library\bin\clips.dll;
+          cd .. ;
           python -c "import clips" ;
       - uses: actions/upload-artifact@v2
         with:

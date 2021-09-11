@@ -28,11 +28,30 @@ target_link_libraries(004_TemplateFact clips-static )
 add_test(004_TemplateFact 004_TemplateFact)
 
 
+add_executable(005_UDF  005_UserDefinedFunction.c)
+target_link_libraries(005_UDF clips-static )
+add_test(005_UDF 005_UDF)
+
+add_executable(006_UDFRT  006_UserDefinedFunction_Runtime.c)
+target_link_libraries(006_UDFRT clips-static )
+add_test(006_UDFRT 006_UDFRT)
+
+
+
 if (WIN32)
 	# tests that only work on windows
 
 else ()
 	#tests that only work on posix
+
+	# test set 7 tests runtime linking for function calls
+	add_library(UDFRTlib007 SHARED 007a_UserDefinedFunction_Lib.c)
+	target_link_libraries(UDFRTlib007 clips)
+	add_library(UDFRTlib2007 SHARED 007a_UserDefinedFunction_Lib2.c)
+	target_link_libraries(UDFRTlib2007 clips)
+	add_executable(007_UDFRT_LW  007b_UserDefinedFunction_LibWrapper.c)
+	target_link_libraries(007_UDFRT_LW clips dl)
+	add_test(007_UDFRT_LW 007_UDFRT_LW)
 endif()
 
 
