@@ -22,7 +22,7 @@ if (WIN32)
 	target_link_libraries(testdispatch dispatchloader)
 	target_link_libraries(testdispatch dispatcher)
 	
-	add_test(testdispatch testdispatch)
+	add_test(testdispatch ${EXECUTABLE_OUTPUT_PATH}/testdispatch)
 
 else ()
 	#tests that only work on posix
