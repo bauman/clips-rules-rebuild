@@ -27,7 +27,7 @@ jobs:
           sudo cmake --install . ;
           cd .. ;
           mkdir -p release-artifacts ;
-          zip release-artifacts\clips-static-631-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/lib/libclips* /usr/lib/static/libclips* ;
+          zip release-artifacts/clips-static-631-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/lib/libclips* /usr/lib/static/libclips* ;
           file /usr/bin/clipscli  ;
       - name: build dynamic 6.31 release
         run:
@@ -38,7 +38,7 @@ jobs:
           sudo cmake --install . ;
           cd .. ;
           mkdir -p release-artifacts ;
-          zip release-artifacts\clips-static-631-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/lib/libclips* /usr/lib/static/libclips* ;
+          zip release-artifacts/clips-static-631-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/lib/libclips* /usr/lib/static/libclips* ;
           file /usr/bin/clipscli  ;
       - name: build clipspy-0.3.3
         run:
@@ -53,7 +53,7 @@ jobs:
           sudo cmake --install . ;
           cd .. ;
           mkdir -p release-artifacts ;
-          zip release-artifacts\clips-static-631-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/lib/libclips* /usr/lib/static/libclips* ;
+          zip release-artifacts/clips-static-640-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/include/clips-640/*.h /usr/lib/libclips* /usr/lib/static/libclips* ;
           file /usr/bin/clipscli  ;
       - name: build dynamic 6.40 release
         run:
@@ -61,10 +61,11 @@ jobs:
           cd cmake-build-dynamic-640-release ;
           cmake -Dstatic-cli=OFF -DCMAKE_INSTALL_PREFIX=/usr .. ;
           cmake --build .  --config Release  ;
+          ctest;
           sudo cmake --install . ;
           cd .. ;
           mkdir -p release-artifacts ;
-          zip release-artifacts\clips-static-631-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/lib/libclips* /usr/lib/static/libclips* ;
+          zip release-artifacts/clips-640-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/include/clips-640/*.h /usr/lib/libclips* /usr/lib/static/libclips* ;
           file /usr/bin/clipscli  ;
       - name: build clipspy-1.0.0
         run:
@@ -76,7 +77,7 @@ jobs:
       - uses: actions/upload-artifact@v2
         with:
           name: release
-          path: release-artifacts\
+          path: release-artifacts/*.zip
       - uses: actions/upload-artifact@v2
         with:
           name: clipspy-0.3.3-wheel
