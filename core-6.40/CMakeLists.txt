@@ -173,7 +173,8 @@ set( SOURCE_FILES
 if(WIN32)
     add_definitions(-DWIN_MVC=1)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
-    
+    set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+
     add_library(  clips SHARED  ${SOURCE_FILES})
     add_library(  clips-static  ${SOURCE_FILES} )
     add_executable(clipscli main.c)

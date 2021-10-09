@@ -5,7 +5,7 @@ add_definitions("-DDEFTEMPLATE_CONSTRUCT")
 
 
 INCLUDE_DIRECTORIES(../core-6.40/)
-
+add_subdirectory ("example-loader")
 
 
 
@@ -40,7 +40,11 @@ add_test(006_UDFRT 006_UDFRT)
 
 if (WIN32)
 	# tests that only work on windows
-
+	set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+	add_library(udfrt007 SHARED 007a_UserDefinedFunction_Runtime_win_lib.c)
+	target_link_libraries(udfrt007 clips-static)
+	add_executable(007b  007b_UserDefinedFunction_Runtime_win_wrap.cpp)
+	target_link_libraries(udfrt007 clips-static)
 else ()
 	#tests that only work on posix
 endif()

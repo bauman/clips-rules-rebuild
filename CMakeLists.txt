@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.3)
 project(clips)
+
+set(LIBRARY_OUTPUT_PATH "${CMAKE_BINARY_DIR}")
+set(EXECUTABLE_OUTPUT_PATH "${CMAKE_BINARY_DIR}")
+
 INCLUDE_DIRECTORIES(/usr/include/ )
 LINK_DIRECTORIES(/usr/lib64/)
 

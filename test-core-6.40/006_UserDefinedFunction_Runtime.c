@@ -127,7 +127,8 @@ int main(
 			}
 			n = GetNextFact(theEnv, n);
 		}
-
+		//Bsave(theEnv, "dan.bclp");
+		//Bload(theEnv, "dan.bclp");
 		destroy_success = DestroyEnvironment(theEnv);
 	}
 	
