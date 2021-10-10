@@ -7,8 +7,11 @@
 #define EXTERNC
 #endif
 
-
+#ifdef WIN32
 typedef void(__cdecl* CALLABLE)(void* env, void* udfc, void* out);
+#else
+typedef void * (*CALLABLE)(void* env, void* udfc, void* out);
+#endif
 
 EXTERNC void* load_lib(const char* dll_name);
 

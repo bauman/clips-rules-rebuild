@@ -20,7 +20,11 @@ int see_if_it_works() {
 		build_result = setup_dispatcher(theEnv);
 
 		theFB = CreateFactBuilder(theEnv, "functions");
+#ifdef WIN32
 		FBPutSlotCLIPSLexeme(theFB, "library", CreateString(theEnv, "cube.dll"));
+#else
+        FBPutSlotCLIPSLexeme(theFB, "library", CreateString(theEnv, "./libcube.so"));
+#endif
 		FBPutSlotCLIPSLexeme(theFB, "function", CreateString(theEnv, "Cube"));
 		Fact * theFact = FBAssert(theFB);
 		FBDispose(theFB);

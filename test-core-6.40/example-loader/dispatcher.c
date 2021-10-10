@@ -112,7 +112,7 @@ void DefineFuncIfRequired(
 
 	Deffunction* func =  FindDeffunction(env, function);
 	if (!func) {
-		int written = snprintf(&builder, 1024, "(deffunction %s ($?args) 	(Dispatch %s (expand$ ?args)))", function, function);
+		int written = snprintf((char *)&builder, 1024, "(deffunction %s ($?args) 	(Dispatch %s (expand$ ?args)))", function, function);
 		if (written > 0 && written < 1024) {
 			build_result = Build(env, builder);
 			if (build_result) {
