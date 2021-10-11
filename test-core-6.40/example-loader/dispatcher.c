@@ -254,6 +254,7 @@ static BuildError LoadErrorRules(Environment* env) {
 		"   =>"
 		"   (modify ?d "
 		"          (error \"Function was already defined, not redefining\") "
+		"          (loaded 1) "
 		"   )"
 		" )");
 	build_result = Build(env, ""

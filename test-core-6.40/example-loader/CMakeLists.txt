@@ -16,12 +16,11 @@ if (WIN32)
 	target_link_libraries(dispatcher dispatchloader)
 	target_link_libraries(dispatcher clips)
 
-	add_executable(testdispatch test.c)
+	add_executable(testdispatch tests/test.c)
 	target_link_libraries(testdispatch clips)
 	target_link_libraries(testdispatch dispatchlocker)
 	target_link_libraries(testdispatch dispatchloader)
 	target_link_libraries(testdispatch dispatcher)
-
 	add_test(testdispatch ${EXECUTABLE_OUTPUT_PATH}/testdispatch)
 
 else ()
@@ -41,12 +40,11 @@ else ()
 	target_link_libraries(dispatcher dispatchloader)
 	target_link_libraries(dispatcher clips)
 
-	add_executable(testdispatch test.c)
+	add_executable(testdispatch tests/test.c)
 	target_link_libraries(testdispatch clips)
 	target_link_libraries(testdispatch dispatchlocker)
 	target_link_libraries(testdispatch dispatchloader)
 	target_link_libraries(testdispatch dispatcher)
-
 	add_test(testdispatch ${EXECUTABLE_OUTPUT_PATH}/testdispatch)
 
 endif()

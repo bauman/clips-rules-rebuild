@@ -31,7 +31,7 @@ int see_if_it_works() {
 		
 
 		rules_fired = Run(theEnv, -1);
-		Save(theEnv, "dan.clp");
+		Save(theEnv, "test-save-state.clp");
 
 		build_result = Build(theEnv, ""
 			"(deftemplate maths"
@@ -94,9 +94,10 @@ int see_if_it_works() {
 		FMPutSlotString(theFM, "action", "unload");
 		FMModify(theFM);
 		FMDispose(theFM);
-
+		SaveScope ss = LOCAL_SAVE;
+		SaveFacts(theEnv, "test-save-facts-1.clp", ss);
 		int unloading_in_usetriggers_reload = Run(theEnv, -1);
-		
+		SaveFacts(theEnv, "test-save-facts-2.clp", ss);
 		//Bsave(theEnv, "dan.bclp");
 		//Bload(theEnv, "dan.bclp");
 		destroy_success = DestroyEnvironment(theEnv);
