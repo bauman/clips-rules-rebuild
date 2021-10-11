@@ -364,7 +364,7 @@ if(WIN32)
     install(TARGETS clipscli clips clips-static
         RUNTIME DESTINATION bin
         LIBRARY DESTINATION lib
-        ARCHIVE DESTINATION lib/static)
+        ARCHIVE DESTINATION lib)
     
 else()
 
@@ -389,5 +389,5 @@ else()
     install(TARGETS clipscli clips clips-static
             RUNTIME DESTINATION bin
             LIBRARY DESTINATION lib
-            ARCHIVE DESTINATION lib/static)
+            ARCHIVE DESTINATION lib)
 endif()
