@@ -348,7 +348,8 @@ set (HEADER_FILES
 if(WIN32)
     add_definitions(-DWIN_MVC=1)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
-    
+    set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+
     add_library(  clips SHARED  ${SOURCE_FILES})
     add_library(  clips-static  ${SOURCE_FILES} )
     add_executable(clipscli main.c)
@@ -363,7 +364,7 @@ if(WIN32)
     install(TARGETS clipscli clips clips-static
         RUNTIME DESTINATION bin
         LIBRARY DESTINATION lib
-        ARCHIVE DESTINATION lib/static)
+        ARCHIVE DESTINATION lib)
     
 else()
 
@@ -388,5 +389,5 @@ else()
     install(TARGETS clipscli clips clips-static
             RUNTIME DESTINATION bin
             LIBRARY DESTINATION lib
-            ARCHIVE DESTINATION lib/static)
+            ARCHIVE DESTINATION lib)
 endif()

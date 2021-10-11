@@ -1,5 +1,13 @@
 cmake_minimum_required(VERSION 3.3)
 project(clips)
+
+if (WIN32)
+	# windows needs this for dll/lib linking because windows
+	set(LIBRARY_OUTPUT_PATH "${CMAKE_BINARY_DIR}")
+	set(EXECUTABLE_OUTPUT_PATH "${CMAKE_BINARY_DIR}")
+else()
+	# nothing special needed for linux
+endif()
 INCLUDE_DIRECTORIES(/usr/include/ )
 LINK_DIRECTORIES(/usr/lib64/)
 
