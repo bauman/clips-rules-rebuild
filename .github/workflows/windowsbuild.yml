@@ -74,7 +74,8 @@ jobs:
           cd cmake-build-dynamic-640-release ;
           cmake -Dstatic-cli=OFF -Dbuild-640=ON -Dbuild-641-6=OFF -DCMAKE_INSTALL_PREFIX=c:\usr  -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
           cmake --build . --target ALL_BUILD --config Release  ;
-          ctest;
+          ctest -C Release ;
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } ;
           cmake --install . ;
           cd .. ;
           md -Force release-artifacts  ;

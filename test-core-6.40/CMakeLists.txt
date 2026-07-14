@@ -46,6 +46,12 @@ if (WIN32)
 	add_dependencies(007b_win cube)
 	add_test(007b_win 007b_win)
 
+	# no rpath on windows: copy cube.dll (and the clips.dll it depends on) next to
+	# 007b_win.exe so its LoadLibrary("cube.dll") resolves at runtime
+	add_custom_command(TARGET 007b_win POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:cube> $<TARGET_FILE_DIR:007b_win>
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips> $<TARGET_FILE_DIR:007b_win>)
+
 elseif (APPLE)
 	# posix runtime-link test 007 is skipped on macOS: dlopen'd libraries don't resolve
 	# clips symbols under macOS's two-level namespace; needs porting before it runs on APPLE.

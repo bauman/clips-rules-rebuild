@@ -23,6 +23,11 @@ if (WIN32)
 	target_link_libraries(testdispatch dispatcher)
 	add_test(testdispatch testdispatch)
 
+	# no rpath on windows: copy clips.dll next to the test exe so testdispatch and the
+	# dispatch/cube DLLs it pulls in can resolve it at load time
+	add_custom_command(TARGET testdispatch POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips> $<TARGET_FILE_DIR:testdispatch>)
+
 else ()
 	#tests that only work on posix
 	add_library(cube SHARED plugins/Cube.c)

@@ -3,13 +3,19 @@
 
 typedef void (__cdecl* MYPROC)(void* env, void* udfc, void* out);
 
-void main() {
-    HINSTANCE hinstLib;
-    MYPROC ProcAdd;
-    BOOL fFreeResult, fRunTimeLinkSuccess = FALSE;
-    hinstLib = LoadLibrary(TEXT("cube.dll"));
-    ProcAdd = (MYPROC)GetProcAddress(hinstLib,TEXT("Cube"));
-    
-    fFreeResult = FreeLibrary(hinstLib);
+int main() {
+    HINSTANCE hinstLib = LoadLibrary(TEXT("cube.dll"));
+    if (hinstLib == NULL) {
+        return 1;  // cube.dll failed to load
+    }
+    MYPROC ProcAdd = (MYPROC)GetProcAddress(hinstLib, TEXT("Cube"));
+    if (ProcAdd == NULL) {
+        FreeLibrary(hinstLib);
+        return 2;  // Cube not exported by cube.dll
+    }
+    if (!FreeLibrary(hinstLib)) {
+        return 3;  // failed to free the library
+    }
+    return 0;
 }
 
