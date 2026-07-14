@@ -61,7 +61,7 @@ jobs:
           Remove-Item -LiteralPath "c:/usr" -Force -Recurse -ErrorAction Ignore ;
           mkdir cmake-build-static-640-release ;
           cd cmake-build-static-640-release ;
-          cmake -Dbuild-640=ON -Dstatic-cli=ON  -DCMAKE_INSTALL_PREFIX=c:\usr  -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
+          cmake -Dbuild-640=ON -Dbuild-641-6=OFF -Dstatic-cli=ON  -DCMAKE_INSTALL_PREFIX=c:\usr  -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
           cmake --build . --target ALL_BUILD --config Release  ;
           cmake --install . ;
           cd .. ;
@@ -74,7 +74,7 @@ jobs:
           Remove-Item -LiteralPath "c:/usr" -Force -Recurse -ErrorAction Ignore ;
           mkdir cmake-build-dynamic-640-release ;
           cd cmake-build-dynamic-640-release ;
-          cmake -Dstatic-cli=OFF -DCMAKE_INSTALL_PREFIX=c:\usr  -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
+          cmake -Dstatic-cli=OFF -Dbuild-640=ON -Dbuild-641-6=OFF -DCMAKE_INSTALL_PREFIX=c:\usr  -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
           cmake --build . --target ALL_BUILD --config Release  ;
           ctest;
           cmake --install . ;
