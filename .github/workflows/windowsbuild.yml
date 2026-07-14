@@ -90,9 +90,9 @@ jobs:
           dir dist ;
           pip uninstall -y clipspy ;
           pip install (Get-ChildItem dist/*.whl | Select-Object -ExpandProperty FullName) ;
+          cd .. ;
           $clipsdir = python -c "import os, importlib.util; print(os.path.dirname(importlib.util.find_spec('clips').origin))" ;
           Copy-Item c:\usr\bin\clips.dll $clipsdir ;
-          cd .. ;
           python -c "import clips" ;
       - uses: actions/upload-artifact@v4
         with:
