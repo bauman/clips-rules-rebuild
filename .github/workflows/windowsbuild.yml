@@ -2,18 +2,30 @@ name: Windows Build
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, windev ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, windev ]
 
 jobs:
   build:
-    runs-on:
-      - self-hosted
-      - server2019
-      - vs2019c
+    runs-on: windows-2022
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
+
+      - name: set up MSVC dev environment
+        # puts cl.exe / dumpbin.exe on PATH (not there by default on hosted runners)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: install python build deps
+        run: python -m pip install --upgrade pip setuptools wheel cffi
+
       - name: build static 6.31 release
         run:
           Remove-Item -LiteralPath "c:/usr" -Force -Recurse -ErrorAction Ignore ;
@@ -75,21 +87,22 @@ jobs:
         run:
           cd clipspy-1.0.0 ;
           python setup.py bdist_wheel ;
-          dir  dist ;
-          pip uninstall -y clipspy;
-          pip install dist/clipspy-1.0.0-cp38-cp38-win_amd64.whl ;
-          cp c:\usr\bin\clips.dll c:\Python\Library\bin\clips.dll;
+          dir dist ;
+          pip uninstall -y clipspy ;
+          pip install (Get-ChildItem dist/*.whl | Select-Object -ExpandProperty FullName) ;
+          $clipsdir = python -c "import os, importlib.util; print(os.path.dirname(importlib.util.find_spec('clips').origin))" ;
+          Copy-Item c:\usr\bin\clips.dll $clipsdir ;
           cd .. ;
           python -c "import clips" ;
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v4
         with:
           name: release
           path: release-artifacts\
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v4
         with:
           name: clipspy-0.3.3-wheel
           path: clipspy-0.3.3/dist/*.whl
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v4
         with:
           name: clipspy-1.0.0-wheel
           path: clipspy-1.0.0/dist/*.whl
