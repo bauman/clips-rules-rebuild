@@ -38,11 +38,13 @@ add_test(006_UDFRT 006_UDFRT)
 
 
 
-if (WIN32)
-	# tests that only work on windows
+if (WIN32 OR APPLE)
+	# tests skipped on windows and macOS.
+	# 007 (runtime UDF linking via dlopen) does not resolve clips symbols under
+	# macOS's two-level namespace; needs porting before it can run on APPLE.
 
 else ()
-	#tests that only work on posix
+	#tests that only work on posix (Linux)
 
 	# test set 7 tests runtime linking for function calls
 	add_library(UDFRTlib007 SHARED 007a_UserDefinedFunction_Lib.c)
