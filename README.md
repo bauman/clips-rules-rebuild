@@ -83,3 +83,4 @@ cmake --install .
 
 > Note: the committed CI still targets the older versions (6.31 / 6.40, clipspy 0.3.3 /
 > 1.0.0). When adding a version, update both the CMake options **and** the workflow steps.
+
