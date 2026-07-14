@@ -84,10 +84,11 @@ version, build, `ctest`, install, then build/install the clipspy wheel and smoke
 | `windowsbuild.yml` | `windows-2022` | `c:\usr` | MSVC via `ilammy/msvc-dev-cmd`; `dumpbin` checks |
 | `macbuild.yml` | `macos-14` (arm64) | `/usr/local` | **dynamic only** — `-static` isn't supported on macOS |
 
-**Triggers.** Each workflow runs on `push` to `main` and the dev branches, and on
-`pull_request` to `main`. A `concurrency` group keyed to the branch cancels superseded runs
-(so a push and its PR don't both run to completion). Windows/Linux share `windev`/`lindev`;
-macOS uses `macdev`.
+**Triggers.** Each workflow runs on `push` to `main` and on `pull_request` to `main`; work
+on a branch gets CI through its PR. A `concurrency` group keyed to the branch cancels
+superseded runs. Artifacts publish only on the `main` push (i.e. a merged PR) — the upload
+steps are gated with `if: github.event_name == 'push' && github.ref == 'refs/heads/main'`,
+so PR runs build and test but don't upload.
 
 **Version / artifact policy.** All builders still *compile* 6.31 (+ clipspy 0.3.3) as a
 build check, but **only publish 6.40 artifacts** (`clipscli`/libs zip + the clipspy-1.0.0
