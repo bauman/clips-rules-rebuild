@@ -74,13 +74,28 @@ cmake --install .
 
 ## Continuous integration
 
-- **`.github/workflows/linuxbuild.yml`** — runs on push/PR to `main` (ubuntu-24.04).
-  Installs build deps, then for each version: configures with CMake, builds (static and
-  dynamic), runs `ctest`, installs, zips the result into `release-artifacts/`, and builds +
-  installs the clipspy wheel. Uploads the zips and wheels as artifacts.
-- **`.github/workflows/windowsbuild.yml`** — the same flow on a self-hosted VS2019 runner
-  (`c:\usr` prefix). Currently gated on branch `main-never`, so it is effectively disabled.
+Three GitHub-hosted builders, all following the same shape — configure with CMake per
+version, build, `ctest`, install, then build/install the clipspy wheel and smoke-test
+`import clips`:
 
-> Note: the committed CI still targets the older versions (6.31 / 6.40, clipspy 0.3.3 /
-> 1.0.0). When adding a version, update both the CMake options **and** the workflow steps.
+| Workflow | Runner | Prefix | Notes |
+|---|---|---|---|
+| `linuxbuild.yml` | `ubuntu-24.04` | `/usr` | static + dynamic; `sudo apt` deps |
+| `windowsbuild.yml` | `windows-2022` | `c:\usr` | MSVC via `ilammy/msvc-dev-cmd`; `dumpbin` checks |
+| `macbuild.yml` | `macos-14` (arm64) | `/usr/local` | **dynamic only** — `-static` isn't supported on macOS |
+
+**Triggers.** Each workflow runs on `push` to `main` and the dev branches, and on
+`pull_request` to `main`. A `concurrency` group keyed to the branch cancels superseded runs
+(so a push and its PR don't both run to completion). Windows/Linux share `windev`/`lindev`;
+macOS uses `macdev`.
+
+**Version / artifact policy.** All builders still *compile* 6.31 (+ clipspy 0.3.3) as a
+build check, but **only publish 6.40 artifacts** (`clipscli`/libs zip + the clipspy-1.0.0
+wheel) — we're migrating consumers to **at least 6.40**. 6.31/clipspy-0.3.3 artifacts are no
+longer uploaded.
+
+> When adding a version, update the CMake options **and** every workflow. Each CI step must
+> pin exactly one version (e.g. `-Dbuild-640=ON -Dbuild-641-6=OFF`) — because
+> `build-641-6` defaults ON, an unpinned step pulls in a second version and collides. See
+> `CLAUDE.md` for the shared-library placement details each OS needs for `import clips`.
 

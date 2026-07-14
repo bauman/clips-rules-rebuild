@@ -2,7 +2,7 @@ name: Windows Build
 
 on:
   push:
-    branches: [ main, windev, lindev ]
+    branches: [ main, windev ]
   pull_request:
     branches: [ main ]
 
@@ -93,10 +93,12 @@ jobs:
           Copy-Item c:\usr\bin\clips.dll $clipsdir ;
           python -c "import clips" ;
       - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           name: release
           path: release-artifacts\
       - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           name: clipspy-1.0.0-wheel
           path: clipspy-1.0.0/dist/*.whl

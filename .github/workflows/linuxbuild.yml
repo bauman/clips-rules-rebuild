@@ -2,7 +2,7 @@ name: Linux Build
 
 on:
   push:
-    branches: [ main, windev, lindev ]
+    branches: [ main, lindev ]
   pull_request:
     branches: [ main ]
 
@@ -79,10 +79,12 @@ jobs:
           sudo ldconfig ;
           python3 -c "import clips" ;
       - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           name: release
           path: release-artifacts/*.zip
       - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           name: clipspy-1.0.0-wheel
           path: clipspy-1.0.0/dist/*.whl
