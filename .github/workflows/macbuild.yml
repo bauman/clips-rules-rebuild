@@ -1,0 +1,61 @@
+name: macOS Build
+
+on:
+  push:
+    branches: [ main, macdev ]
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          lfs: true
+
+      - name: set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: install python build deps
+        run: python3 -m pip install --upgrade pip setuptools wheel cffi
+
+      # NOTE: mac builds are dynamic-only. The static-cli path passes `-static`
+      # linker flags, which macOS does not support (no static libc / crt0.o).
+      # Prefix is /usr/local because /usr is SIP-protected and not writable.
+      - name: build dynamic 6.40 release
+        run: |
+          mkdir cmake-build-dynamic-640-release
+          cd cmake-build-dynamic-640-release
+          cmake -Dbuild-640=ON -Dbuild-641-6=OFF -Dstatic-cli=OFF -DCMAKE_INSTALL_PREFIX=/usr/local ..
+          cmake --build . --config Release
+          ctest
+          sudo cmake --install .
+          cd ..
+          mkdir -p release-artifacts
+          zip release-artifacts/clips-640-mac-${GITHUB_RUN_NUMBER}.zip /usr/local/bin/clipscli /usr/local/include/clips-640/*.h /usr/local/lib/libclips*
+          file /usr/local/bin/clipscli
+
+      - name: build clipspy-1.0.0
+        run: |
+          cd clipspy-1.0.0
+          LIBRARY_PATH=/usr/local/lib CPATH=/usr/local/include/clips-640 python3 setup.py bdist_wheel
+          ls dist
+          pip3 install --upgrade --force-reinstall dist/*.whl
+          cd ..
+          DYLD_LIBRARY_PATH=/usr/local/lib python3 -c "import clips"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-mac
+          path: release-artifacts/*.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: clipspy-1.0.0-wheel-mac
+          path: clipspy-1.0.0/dist/*.whl
