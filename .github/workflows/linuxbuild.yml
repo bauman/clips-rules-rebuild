@@ -15,7 +15,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ ubuntu-24.04 ]
+        os: [ ubuntu-24.04, ubuntu-24.04-arm ]
     steps:
       - uses: actions/checkout@v5
         with:
@@ -114,7 +114,7 @@ jobs:
           sudo cmake --install . ;
           cd .. ;
           mkdir -p release-artifacts ;
-          zip release-artifacts/clips-static-642-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/include/clips-642/*.h /usr/lib/libclips* /usr/lib/static/libclips* ;
+          zip release-artifacts/clips-static-642-${{ matrix.os }}-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/include/clips-642/*.h /usr/lib/libclips* /usr/lib/static/libclips* ;
           file /usr/bin/clipscli  ;
       - name: build dynamic 6.4.2 release
         run:
@@ -126,15 +126,15 @@ jobs:
           sudo cmake --install . ;
           cd .. ;
           mkdir -p release-artifacts ;
-          zip release-artifacts/clips-642-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/include/clips-642/*.h /usr/lib/libclips* /usr/lib/static/libclips* ;
+          zip release-artifacts/clips-642-${{ matrix.os }}-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/include/clips-642/*.h /usr/lib/libclips* /usr/lib/static/libclips* ;
           file /usr/bin/clipscli  ;
       - uses: actions/upload-artifact@v4
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
-          name: release
+          name: release-${{ matrix.os }}
           path: release-artifacts/*.zip
       - uses: actions/upload-artifact@v4
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
-          name: clipspy-1.0.6-wheel
+          name: clipspy-1.0.6-wheel-${{ matrix.os }}
           path: clipspy-1.0.6/dist/*.whl
