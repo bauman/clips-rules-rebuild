@@ -6,6 +6,7 @@ add_definitions("-DDEFTEMPLATE_CONSTRUCT")
 
 INCLUDE_DIRECTORIES(../core-6.40/)
 
+add_subdirectory ("example-loader")
 
 
 
@@ -38,10 +39,22 @@ add_test(006_UDFRT 006_UDFRT)
 
 
 
-if (WIN32 OR APPLE)
-	# tests skipped on windows and macOS.
-	# 007 (runtime UDF linking via dlopen) does not resolve clips symbols under
-	# macOS's two-level namespace; needs porting before it can run on APPLE.
+if (WIN32)
+	# windows runtime-linking test: 007b_win LoadLibrary's cube.dll (built by example-loader)
+	# and resolves the Cube UDF via GetProcAddress. Reuses that plugin; no dedicated lib needed.
+	add_executable(007b_win 007b_UserDefinedFunction_Runtime_win_wrap.cpp)
+	add_dependencies(007b_win cube)
+	add_test(007b_win 007b_win)
+
+	# no rpath on windows: copy cube.dll (and the clips.dll it depends on) next to
+	# 007b_win.exe so its LoadLibrary("cube.dll") resolves at runtime
+	add_custom_command(TARGET 007b_win POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:cube> $<TARGET_FILE_DIR:007b_win>
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips> $<TARGET_FILE_DIR:007b_win>)
+
+elseif (APPLE)
+	# posix runtime-link test 007 is skipped on macOS: dlopen'd libraries don't resolve
+	# clips symbols under macOS's two-level namespace; needs porting before it runs on APPLE.
 
 else ()
 	#tests that only work on posix (Linux)
