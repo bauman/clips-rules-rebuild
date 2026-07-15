@@ -97,7 +97,7 @@ size_t HashFact(
    /* Get a hash value for the deftemplate name. */
    /*============================================*/
 
-   count += theFact->whichDeftemplate->header.name->bucket * 73981;
+   count += (size_t) theFact->whichDeftemplate->header.name->bucket * 73981;
 
    /*=================================================*/
    /* Add in the hash value for the rest of the fact. */
