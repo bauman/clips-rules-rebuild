@@ -30,64 +30,58 @@ jobs:
       - name: install python build deps
         run: python -m pip install --upgrade pip setuptools wheel cffi
 
-      # 6.31 and 6.40 are kept as build-only regression checks (not published).
+      # 6.31 / 6.40 / 6.4.1 are build-only regression checks. 6.4.2 is the published C library.
+      # build-642 is the default option, so non-6.4.2 steps must pass -Dbuild-642=OFF.
       - name: build static 6.31 release (check only)
         run:
           mkdir cmake-build-static-631-release ;
           cd cmake-build-static-631-release ;
-          cmake -Dbuild-631=ON -Dbuild-641-6=OFF -Dstatic-cli=ON  -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
+          cmake -Dbuild-631=ON -Dbuild-642=OFF -Dstatic-cli=ON  -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
           cmake --build . --target ALL_BUILD --config Release  ;
       - name: build dynamic 6.31 release (check only)
         run:
           mkdir cmake-build-dynamic-631-release ;
           cd cmake-build-dynamic-631-release ;
-          cmake -Dbuild-631=ON -Dbuild-641-6=OFF -Dstatic-cli=OFF -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
+          cmake -Dbuild-631=ON -Dbuild-642=OFF -Dstatic-cli=OFF -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
           cmake --build . --target ALL_BUILD --config Release  ;
       - name: build static 6.40 release (check only)
         run:
           mkdir cmake-build-static-640-release ;
           cd cmake-build-static-640-release ;
-          cmake -Dbuild-640=ON -Dbuild-641-6=OFF -Dstatic-cli=ON  -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
+          cmake -Dbuild-640=ON -Dbuild-642=OFF -Dstatic-cli=ON  -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
           cmake --build . --target ALL_BUILD --config Release  ;
       - name: build dynamic 6.40 release (check only)
         run:
           mkdir cmake-build-dynamic-640-release ;
           cd cmake-build-dynamic-640-release ;
-          cmake -Dbuild-640=ON -Dbuild-641-6=OFF -Dstatic-cli=OFF -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
+          cmake -Dbuild-640=ON -Dbuild-642=OFF -Dstatic-cli=OFF -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
           cmake --build . --target ALL_BUILD --config Release  ;
           ctest -C Release ;
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } ;
 
-      # 6.4.1 is the published C library (bin + libs + include/clips-641 headers, all under c:\usr).
-      - name: build static 6.4.1 release
+      # 6.4.1 kept as a build-only check, but still installed so clipspy-1.0.6 links/imports against it.
+      - name: build static 6.4.1 release (check only)
         run:
           Remove-Item -LiteralPath "c:/usr" -Force -Recurse -ErrorAction Ignore ;
           mkdir cmake-build-static-641-release ;
           cd cmake-build-static-641-release ;
-          cmake -Dbuild-641-6=ON -Dbuild-640=OFF -Dstatic-cli=ON  -DCMAKE_INSTALL_PREFIX=c:\usr  -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
+          cmake -Dbuild-641-6=ON -Dbuild-642=OFF -Dstatic-cli=ON  -DCMAKE_INSTALL_PREFIX=c:\usr  -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
           cmake --build . --target ALL_BUILD --config Release  ;
           cmake --install . ;
-          cd .. ;
-          md -Force release-artifacts  ;
-          powershell -C  "&  Compress-Archive -Path C:\usr -DestinationPath release-artifacts\clips-static-641-$env:GITHUB_RUN_NUMBER.zip " ;
-          dumpbin /dependents C:/usr/bin/clipscli.exe  ;
-      - name: build dynamic 6.4.1 release
+      - name: build dynamic 6.4.1 release (check only)
         run:
           Remove-Item -LiteralPath "c:/usr" -Force -Recurse -ErrorAction Ignore ;
           mkdir cmake-build-dynamic-641-release ;
           cd cmake-build-dynamic-641-release ;
-          cmake -Dbuild-641-6=ON -Dbuild-640=OFF -Dstatic-cli=OFF -DCMAKE_INSTALL_PREFIX=c:\usr  -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
+          cmake -Dbuild-641-6=ON -Dbuild-642=OFF -Dstatic-cli=OFF -DCMAKE_INSTALL_PREFIX=c:\usr  -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
           cmake --build . --target ALL_BUILD --config Release  ;
           ctest -C Release ;
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } ;
           cmake --install . ;
-          cd .. ;
-          md -Force release-artifacts  ;
-          powershell -C  "&  Compress-Archive -Path C:\usr -DestinationPath release-artifacts\clips-641-$env:GITHUB_RUN_NUMBER.zip " ;
-          dumpbin /dependents C:/usr/bin/clipscli.exe  ;
 
       # clipspy on Windows is a lightweight build check only (upstream ships wheels for all
-      # platforms). continue-on-error so a clipspy hiccup never blocks publishing the C library.
+      # platforms). It stays on 6.4.1 (links the c:\usr clips.lib installed above).
+      # continue-on-error so a clipspy hiccup never blocks publishing the C library.
       - name: build clipspy-1.0.6 (check only)
         continue-on-error: true
         run:
@@ -95,6 +89,34 @@ jobs:
           cd clipspy-1.0.6 ;
           python setup.py bdist_wheel ;
           dir dist ;
+
+      # 6.4.2 is the published C library (bin + libs + include/clips-642 headers, all under c:\usr).
+      - name: build static 6.4.2 release
+        run:
+          Remove-Item -LiteralPath "c:/usr" -Force -Recurse -ErrorAction Ignore ;
+          mkdir cmake-build-static-642-release ;
+          cd cmake-build-static-642-release ;
+          cmake -Dbuild-642=ON -Dstatic-cli=ON  -DCMAKE_INSTALL_PREFIX=c:\usr  -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
+          cmake --build . --target ALL_BUILD --config Release  ;
+          cmake --install . ;
+          cd .. ;
+          md -Force release-artifacts  ;
+          powershell -C  "&  Compress-Archive -Path C:\usr -DestinationPath release-artifacts\clips-static-642-$env:GITHUB_RUN_NUMBER.zip " ;
+          dumpbin /dependents C:/usr/bin/clipscli.exe  ;
+      - name: build dynamic 6.4.2 release
+        run:
+          Remove-Item -LiteralPath "c:/usr" -Force -Recurse -ErrorAction Ignore ;
+          mkdir cmake-build-dynamic-642-release ;
+          cd cmake-build-dynamic-642-release ;
+          cmake -Dbuild-642=ON -Dstatic-cli=OFF -DCMAKE_INSTALL_PREFIX=c:\usr  -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
+          cmake --build . --target ALL_BUILD --config Release  ;
+          ctest -C Release ;
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } ;
+          cmake --install . ;
+          cd .. ;
+          md -Force release-artifacts  ;
+          powershell -C  "&  Compress-Archive -Path C:\usr -DestinationPath release-artifacts\clips-642-$env:GITHUB_RUN_NUMBER.zip " ;
+          dumpbin /dependents C:/usr/bin/clipscli.exe  ;
 
       - uses: actions/upload-artifact@v4
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

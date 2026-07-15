@@ -5,6 +5,15 @@ typedef void(*Dispatched)(Environment* env,
                           UDFContext* udfc,
                           UDFValue* out);
 
+#ifdef __APPLE__
+const static char *cubelib = "./libUDFRTlib007.dylib";
+const static char *squarelib = "./libUDFRTlib2007.dylib";
+const static char *containslib = "./libUDFRTlib3007.dylib";
+#elif defined(__linux__)
+const static char *cubelib = "./libUDFRTlib007.so";
+const static char *squarelib = "./libUDFRTlib2007.so";
+const static char *containslib = "./libUDFRTlib3007.so";
+#endif
 
 void Dispatcher(
         Environment * env,
@@ -22,30 +31,30 @@ void Dispatcher(
     // need to maintain internal mapping of name to functions
     UDFValue theArg;
     UDFFirstArgument(udfc, STRING_BIT | SYMBOL_BIT, &theArg);
-
+    const char *library = NULL;
     //   This should be implemented as a switch / dict / lookup
-    if (strncmp(theArg.lexemeValue->contents, "cube", 4) == 0) {
-        void* so = dlopen("./libUDFRTlib007.so", RTLD_NOW);
+    if (strncmp(theArg.lexemeValue->contents, "Cube", 4) == 0) {
+        library = cubelib;
+    } else if (strncmp(theArg.lexemeValue->contents, "Square", 5) == 0) {
+        library = squarelib;
+    } else if (strncmp(theArg.lexemeValue->contents, "Contains", 8) == 0) {
+        library = containslib;
+    }
+    if (library){
+#if defined(__APPLE__) || defined(__linux__)
+        void* so = dlopen(library, RTLD_NOW);
         if (!so) {
             printf("%s\n", dlerror());
         }else {
-            Dispatched Cube = (Dispatched) dlsym(so, "Cube");
-            if(Cube){
-                Cube(env, udfc, out);
+            Dispatched func = (Dispatched) dlsym(so, theArg.lexemeValue->contents);
+            if(func){
+                func(env, udfc, out);
             }
             dlclose(so);
         }
-    } else if (strncmp(theArg.lexemeValue->contents, "square", 5) == 0) {
-        void* so = dlopen("./libUDFRTlib2007.so", RTLD_NOW);
-        if (!so) {
-            printf("%s\n", dlerror());
-        }else {
-            Dispatched Square = (Dispatched) dlsym(so, "Square");
-            if(Square){
-                Square(env, udfc, out);
-            }
-            dlclose(so);
-        }
+#elif defined(_WIN32)
+        // nothing for now
+#endif
     }
 }
 
@@ -70,6 +79,7 @@ int main(
     int new_rule_fired = -1;
     int post_run_facts = 0;
     theEnv = CreateEnvironment();
+    UserFunctions(theEnv);
     if (theEnv) {
 
 
@@ -80,27 +90,36 @@ int main(
                                      "    (slot basef (type FLOAT))"
                                      "    (slot squaredf (type FLOAT))"
                                      "    (slot squaredi (type INTEGER))"
+                                     "    (slot squaredidispatched (type INTEGER))"
                                      "    (slot cubedf (type FLOAT))"
                                      "    (slot cubedi (type INTEGER))"
+                                     "    (slot cubedidispatched (type INTEGER))"
+                                     "    (slot containstest (type INTEGER))"
+                                     "    (slot containstestno (type INTEGER))"
                                      ")");
 
         // run the cube'd clips function through the C Dispatcher
         build_result += Build(theEnv, ""
-                                      "(deffunction cube ($?args)"
-                                      "	(Dispatch cube (expand$ ?args)))");
+                                      "(deffunction Cube ($?args)"
+                                      "	(Dispatch Cube (expand$ ?args)))");
+
         build_result += Build(theEnv, ""
-                                      "(deffunction square ($?args)"
-                                      "	(Dispatch square (expand$ ?args)))");
+                                      "(deffunction Square ($?args)"
+                                      "	(Dispatch Square (expand$ ?args)))");
 
         build_result += Build(theEnv, ""
                                       "(defrule dothemath"
                                       "   ?d <- (maths (basei ?bi) (basef ?bf) (done no))"
                                       "   =>"
                                       "   (modify ?d "
-                                      "          (squaredf (square ?bf)) "
-                                      "          (squaredi (square ?bi))"
-                                      "          (cubedf (cube ?bf)) "
-                                      "          (cubedi (cube ?bi))"
+                                      "          (squaredf (Square ?bf)) "
+                                      "          (squaredi (Square ?bi))"
+                                      "          (squaredidispatched (Dispatch Square ?bi))"
+                                      "          (cubedf (Cube ?bf)) "
+                                      "          (cubedi (Cube ?bi))"
+                                      "          (cubedidispatched (Dispatch Cube ?bi))"
+                                      "          (containstest (Dispatch Contains \"awesome\" \"awe\"))"
+                                      "          (containstestno (Dispatch Contains \"awesome\" \"nope\"))"
                                       "          (done yes)"
                                       "   )"
                                       " )");
@@ -125,6 +144,12 @@ int main(
                     new_rule_fired += 1;  // whatever, just note the error
                 }
             }
+            gse = GetFactSlot(n, "cubedidispatched", &returnValue);
+            if(!gse){
+                if (returnValue.integerValue->contents != 2 * 2 * 2) {
+                    new_rule_fired += 1;  // whatever, just note the error
+                }
+            }
             gse = GetFactSlot(n, "cubedf", &returnValue);
             if (!gse){
                 double expectedf = 2.7 * 2.7 * 2.7;
@@ -135,6 +160,24 @@ int main(
             gse = GetFactSlot(n, "squaredi", &returnValue);
             if (!gse){
                 if (returnValue.integerValue->contents != 2 * 2 ) {
+                    new_rule_fired += 1;  // whatever, just note the error
+                }
+            }
+            gse = GetFactSlot(n, "squaredidispatched", &returnValue);
+            if (!gse){
+                if (returnValue.integerValue->contents != 2 * 2 ) {
+                    new_rule_fired += 1;  // whatever, just note the error
+                }
+            }
+            gse = GetFactSlot(n, "containstest", &returnValue);
+            if (!gse){
+                if (returnValue.integerValue->contents != 1 ) {
+                    new_rule_fired += 1;  // whatever, just note the error
+                }
+            }
+            gse = GetFactSlot(n, "containstestno", &returnValue);
+            if (!gse){
+                if (returnValue.integerValue->contents != 0 ) {
                     new_rule_fired += 1;  // whatever, just note the error
                 }
             }

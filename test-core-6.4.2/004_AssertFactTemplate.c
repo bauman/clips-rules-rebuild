@@ -40,9 +40,9 @@ int main(
 			" )");
 		
 		Reset(theEnv);
-		
-		
-		animal = FindDeftemplate(theEnv, "animal");  // should do a null check on this
+
+
+        animal = FindDeftemplate(theEnv, "animal");  // should do a null check on this
 		DeftemplateSlotNames(animal, &returnValue);
 
 
