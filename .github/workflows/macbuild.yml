@@ -29,29 +29,26 @@ jobs:
       # NOTE: mac builds are dynamic-only. The static-cli path passes `-static`
       # linker flags, which macOS does not support (no static libc / crt0.o).
       # Prefix is /usr/local because /usr is SIP-protected and not writable.
-      # 6.40 is kept as a build-only regression check (not published).
+      # build-642 is the default option, so non-6.4.2 steps pass -Dbuild-642=OFF.
+      # 6.40 / 6.4.1 are build-only checks; 6.4.2 is the published C library.
       - name: build dynamic 6.40 release (check only)
         run: |
           mkdir cmake-build-dynamic-640-release
           cd cmake-build-dynamic-640-release
-          cmake -Dbuild-640=ON -Dbuild-641-6=OFF -Dstatic-cli=OFF ..
+          cmake -Dbuild-640=ON -Dbuild-642=OFF -Dstatic-cli=OFF ..
           cmake --build . --config Release
           ctest
 
-      # 6.4.1 + clipspy-1.0.6 are the published versions.
-      - name: build dynamic 6.4.1 release
+      - name: build dynamic 6.4.1 release (check only)
         run: |
           mkdir cmake-build-dynamic-641-release
           cd cmake-build-dynamic-641-release
-          cmake -Dbuild-641-6=ON -Dbuild-640=OFF -Dstatic-cli=OFF -DCMAKE_INSTALL_PREFIX=/usr/local ..
+          cmake -Dbuild-641-6=ON -Dbuild-642=OFF -Dstatic-cli=OFF -DCMAKE_INSTALL_PREFIX=/usr/local ..
           cmake --build . --config Release
           ctest
           sudo cmake --install .
-          cd ..
-          mkdir -p release-artifacts
-          zip release-artifacts/clips-641-mac-${GITHUB_RUN_NUMBER}.zip /usr/local/bin/clipscli /usr/local/include/clips-641/*.h /usr/local/lib/libclips*
-          file /usr/local/bin/clipscli
 
+      # clipspy stays on 6.4.1 (imports against the 6.4.1 install above, before 6.4.2 lands).
       - name: build clipspy-1.0.6
         run: |
           cd clipspy-1.0.6
@@ -60,6 +57,20 @@ jobs:
           pip3 install --upgrade --force-reinstall dist/*.whl
           cd ..
           DYLD_LIBRARY_PATH=/usr/local/lib python3 -c "import clips"
+
+      # 6.4.2 is the published C library (installed last).
+      - name: build dynamic 6.4.2 release
+        run: |
+          mkdir cmake-build-dynamic-642-release
+          cd cmake-build-dynamic-642-release
+          cmake -Dbuild-642=ON -Dstatic-cli=OFF -DCMAKE_INSTALL_PREFIX=/usr/local ..
+          cmake --build . --config Release
+          ctest
+          sudo cmake --install .
+          cd ..
+          mkdir -p release-artifacts
+          zip release-artifacts/clips-642-mac-${GITHUB_RUN_NUMBER}.zip /usr/local/bin/clipscli /usr/local/include/clips-642/*.h /usr/local/lib/libclips*
+          file /usr/local/bin/clipscli
 
       - uses: actions/upload-artifact@v4
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

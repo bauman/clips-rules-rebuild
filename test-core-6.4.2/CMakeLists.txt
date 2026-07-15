@@ -6,7 +6,15 @@ add_definitions("-DDEFTEMPLATE_CONSTRUCT")
 
 INCLUDE_DIRECTORIES(../core-6.4.2/)
 
+add_subdirectory ("runtime-loader")
 
+# bdi (uthash examples) does not compile under MSVC; skip it on Windows.
+if (NOT WIN32)
+	get_filename_component(_fullpath "bdi" REALPATH)
+	if (EXISTS "${_fullpath}")
+		add_subdirectory(bdi)
+	endif ()
+endif ()
 
 
 add_executable(001_Env_and_assert  001_Env_and_assert.c)
@@ -36,10 +44,24 @@ add_executable(006_UDFRT  006_UserDefinedFunction_Runtime.c)
 target_link_libraries(006_UDFRT clips-static )
 add_test(006_UDFRT 006_UDFRT)
 
+add_executable(008_STRING_FN  008_UserDefinedStringFunction.c)
+target_link_libraries(008_STRING_FN clips-static )
+add_test(008_STRING_FN 008_STRING_FN)
+
 
 
 if (WIN32)
-	# tests that only work on windows
+	# windows runtime-linking test: 007b_win LoadLibrary's cube.dll (built by runtime-loader)
+	# and resolves the Cube UDF via GetProcAddress. core-6.4.2 builds on Windows.
+	add_executable(007b_win 007b_UserDefinedFunction_Runtime_win_wrap.cpp)
+	add_dependencies(007b_win cube)
+	add_test(007b_win 007b_win)
+
+	# no rpath on windows: copy cube.dll (and the clips.dll it depends on) next to
+	# 007b_win.exe so its LoadLibrary("cube.dll") resolves at runtime
+	add_custom_command(TARGET 007b_win POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:cube> $<TARGET_FILE_DIR:007b_win>
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips> $<TARGET_FILE_DIR:007b_win>)
 
 else ()
 	#tests that only work on posix
@@ -49,6 +71,8 @@ else ()
 	target_link_libraries(UDFRTlib007 clips)
 	add_library(UDFRTlib2007 SHARED 007a_UserDefinedFunction_Lib2.c)
 	target_link_libraries(UDFRTlib2007 clips)
+	add_library(UDFRTlib3007 SHARED 007a_UserDefinedFunction_Lib3.c)
+	target_link_libraries(UDFRTlib3007 clips)
 	add_executable(007_UDFRT_LW  007b_UserDefinedFunction_LibWrapper.c)
 	target_link_libraries(007_UDFRT_LW clips dl)
 	add_test(007_UDFRT_LW 007_UDFRT_LW)

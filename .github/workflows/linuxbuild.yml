@@ -22,23 +22,25 @@ jobs:
           lfs: true
 
       - name: prep runner
-        run: 
+        run:
           sudo apt-get update ;
           sudo apt-get install -y zip cmake make gcc python3-pip python3-cffi python3-setuptools python3-wheel ;
-      - name: build static 6.31 release
+      # 6.31 / 6.40 / 6.4.1 are build-only regression checks. 6.4.2 is the published C library.
+      # build-642 is the default option, so non-6.4.2 steps must pass -Dbuild-642=OFF.
+      - name: build static 6.31 release (check only)
         run:
           mkdir cmake-build-static-631-release ;
           cd cmake-build-static-631-release ;
-          cmake -Dbuild-631=ON -Dbuild-641-6=OFF -Dstatic-cli=ON  -DCMAKE_INSTALL_PREFIX=/usr   .. ;
+          cmake -Dbuild-631=ON -Dbuild-642=OFF -Dstatic-cli=ON  -DCMAKE_INSTALL_PREFIX=/usr   .. ;
           cmake --build .  --config Release  ;
           sudo cmake --install . ;
           cd .. ;
           file /usr/bin/clipscli  ;
-      - name: build dynamic 6.31 release
+      - name: build dynamic 6.31 release (check only)
         run:
           mkdir cmake-build-dynamic-631-release ;
           cd cmake-build-dynamic-631-release ;
-          cmake -Dbuild-631=ON -Dbuild-641-6=OFF -Dstatic-cli=OFF -DCMAKE_INSTALL_PREFIX=/usr .. ;
+          cmake -Dbuild-631=ON -Dbuild-642=OFF -Dstatic-cli=OFF -DCMAKE_INSTALL_PREFIX=/usr .. ;
           cmake --build .  --config Release  ;
           sudo cmake --install . ;
           cd .. ;
@@ -47,12 +49,11 @@ jobs:
         run:
           cd clipspy-0.3.3 ;
           python3 setup.py bdist_wheel ;
-      # 6.40 is kept as a build-only regression check (not published).
       - name: build static 6.40 release (check only)
         run:
           mkdir cmake-build-static-640-release ;
           cd cmake-build-static-640-release ;
-          cmake -Dbuild-640=ON -Dbuild-641-6=OFF -Dstatic-cli=ON  -DCMAKE_INSTALL_PREFIX=/usr .. ;
+          cmake -Dbuild-640=ON -Dbuild-642=OFF -Dstatic-cli=ON  -DCMAKE_INSTALL_PREFIX=/usr .. ;
           cmake --build .  --config Release  ;
           sudo cmake --install . ;
           cd .. ;
@@ -61,7 +62,7 @@ jobs:
         run:
           mkdir cmake-build-dynamic-640-release ;
           cd cmake-build-dynamic-640-release ;
-          cmake -Dbuild-640=ON -Dbuild-641-6=OFF -Dstatic-cli=OFF -DCMAKE_INSTALL_PREFIX=/usr .. ;
+          cmake -Dbuild-640=ON -Dbuild-642=OFF -Dstatic-cli=OFF -DCMAKE_INSTALL_PREFIX=/usr .. ;
           cmake --build .  --config Release  ;
           ctest;
           sudo cmake --install . ;
@@ -75,30 +76,26 @@ jobs:
           pip3 install --break-system-packages --upgrade --force-reinstall *.whl ;
           sudo ldconfig ;
           python3 -c "import clips" ;
-      # 6.4.1 + clipspy-1.0.6 are the published versions.
-      - name: build static 6.4.1 release
+      - name: build static 6.4.1 release (check only)
         run:
           mkdir cmake-build-static-641-release ;
           cd cmake-build-static-641-release ;
-          cmake -Dbuild-641-6=ON -Dbuild-640=OFF -Dstatic-cli=ON  -DCMAKE_INSTALL_PREFIX=/usr .. ;
+          cmake -Dbuild-641-6=ON -Dbuild-642=OFF -Dstatic-cli=ON  -DCMAKE_INSTALL_PREFIX=/usr .. ;
           cmake --build .  --config Release  ;
           sudo cmake --install . ;
           cd .. ;
-          mkdir -p release-artifacts ;
-          zip release-artifacts/clips-static-641-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/include/clips-641/*.h /usr/lib/libclips* /usr/lib/static/libclips* ;
           file /usr/bin/clipscli  ;
-      - name: build dynamic 6.4.1 release
+      - name: build dynamic 6.4.1 release (check only)
         run:
           mkdir cmake-build-dynamic-641-release ;
           cd cmake-build-dynamic-641-release ;
-          cmake -Dbuild-641-6=ON -Dbuild-640=OFF -Dstatic-cli=OFF -DCMAKE_INSTALL_PREFIX=/usr .. ;
+          cmake -Dbuild-641-6=ON -Dbuild-642=OFF -Dstatic-cli=OFF -DCMAKE_INSTALL_PREFIX=/usr .. ;
           cmake --build .  --config Release  ;
           ctest;
           sudo cmake --install . ;
           cd .. ;
-          mkdir -p release-artifacts ;
-          zip release-artifacts/clips-641-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/include/clips-641/*.h /usr/lib/libclips* /usr/lib/static/libclips* ;
           file /usr/bin/clipscli  ;
+      # clipspy stays on 6.4.1 (imports against the 6.4.1 install just above, before 6.4.2 lands).
       - name: build clipspy-1.0.6
         run:
           cd clipspy-1.0.6 ;
@@ -107,6 +104,30 @@ jobs:
           pip3 install --break-system-packages --upgrade --force-reinstall *.whl ;
           sudo ldconfig ;
           python3 -c "import clips" ;
+      # 6.4.2 is the published C library (installed last so the release zip captures it).
+      - name: build static 6.4.2 release
+        run:
+          mkdir cmake-build-static-642-release ;
+          cd cmake-build-static-642-release ;
+          cmake -Dbuild-642=ON -Dstatic-cli=ON  -DCMAKE_INSTALL_PREFIX=/usr .. ;
+          cmake --build .  --config Release  ;
+          sudo cmake --install . ;
+          cd .. ;
+          mkdir -p release-artifacts ;
+          zip release-artifacts/clips-static-642-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/include/clips-642/*.h /usr/lib/libclips* /usr/lib/static/libclips* ;
+          file /usr/bin/clipscli  ;
+      - name: build dynamic 6.4.2 release
+        run:
+          mkdir cmake-build-dynamic-642-release ;
+          cd cmake-build-dynamic-642-release ;
+          cmake -Dbuild-642=ON -Dstatic-cli=OFF -DCMAKE_INSTALL_PREFIX=/usr .. ;
+          cmake --build .  --config Release  ;
+          ctest;
+          sudo cmake --install . ;
+          cd .. ;
+          mkdir -p release-artifacts ;
+          zip release-artifacts/clips-642-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/include/clips-642/*.h /usr/lib/libclips* /usr/lib/static/libclips* ;
+          file /usr/bin/clipscli  ;
       - uses: actions/upload-artifact@v4
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
