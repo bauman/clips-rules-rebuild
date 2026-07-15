@@ -91,6 +91,7 @@ jobs:
       - name: build clipspy-1.0.6 (check only)
         continue-on-error: true
         run:
+          $env:LIB += ";c:\usr\lib\static" ;
           cd clipspy-1.0.6 ;
           python setup.py bdist_wheel ;
           dir dist ;
