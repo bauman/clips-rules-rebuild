@@ -516,26 +516,27 @@ static BuildError load_everything(Environment *theEnv){
 }
 
 static long long int loop_facts(Environment *theEnv){
-    long long int rules_fired;
     CLIPSValue returnValue;
     long long int post_run_facts=0;
+    bool found_belief = false;
     Fact* n = GetNextFact(theEnv, NULL);
     while (n) {
         post_run_facts++;
             if (strncmp(n->whichDeftemplate->header.name->contents, "belief", 6) == 0){
                 PrintFact(theEnv, "stdout", n, true, false, NULL);
                 printf("\n\n");
+                found_belief = true;  // the consistency check produced a belief fact
             }
-//            PrintFact(theEnv, "stdout", n, true, false, NULL);
-//            printf("\n\n");
-        rules_fired = strncmp(n->whichDeftemplate->header.name->contents, "certain", 5); // animal must still be there
         GetSlotError gse = GetFactSlot(n, "id", &returnValue);
         if (gse){
-            rules_fired = -1000;
+            return -1000;  // a fact is missing its id slot -> signal error
         }
         n = GetNextFact(theEnv, n);
     }
-    return post_run_facts + rules_fired;
+    if (!found_belief){
+        return -1;  // no belief fact was built -> the inference didn't produce the expected result
+    }
+    return post_run_facts;
 }
 
 int main(
