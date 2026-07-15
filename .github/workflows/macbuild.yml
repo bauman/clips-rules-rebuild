@@ -12,7 +12,14 @@ concurrency:
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # macos-14 is deprecated (per actions/runner-images) but kept as a
+        # regression leg during the transition; macos-26 is the current runner.
+        # Both are Apple-Silicon (arm64) — this matrixes the macOS version.
+        os: [ macos-14, macos-26 ]
     steps:
       - uses: actions/checkout@v5
         with:
@@ -69,16 +76,16 @@ jobs:
           sudo cmake --install .
           cd ..
           mkdir -p release-artifacts
-          zip release-artifacts/clips-642-mac-${GITHUB_RUN_NUMBER}.zip /usr/local/bin/clipscli /usr/local/include/clips-642/*.h /usr/local/lib/libclips*
+          zip release-artifacts/clips-642-${{ matrix.os }}-${GITHUB_RUN_NUMBER}.zip /usr/local/bin/clipscli /usr/local/include/clips-642/*.h /usr/local/lib/libclips*
           file /usr/local/bin/clipscli
 
       - uses: actions/upload-artifact@v4
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
-          name: release-mac
+          name: release-${{ matrix.os }}
           path: release-artifacts/*.zip
       - uses: actions/upload-artifact@v4
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
-          name: clipspy-1.0.6-wheel-mac
+          name: clipspy-1.0.6-wheel-${{ matrix.os }}
           path: clipspy-1.0.6/dist/*.whl
