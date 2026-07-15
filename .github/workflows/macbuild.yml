@@ -19,7 +19,7 @@ jobs:
         # macos-14 is deprecated (per actions/runner-images) but kept as a
         # regression leg during the transition; macos-26 is the current runner.
         # Both are Apple-Silicon (arm64) — this matrixes the macOS version.
-        os: [ macos-14, macos-26 ]
+        os: [ macos-14, macos-26, macos-26-intel ]
     steps:
       - uses: actions/checkout@v5
         with:
