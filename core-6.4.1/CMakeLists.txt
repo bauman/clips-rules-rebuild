@@ -1402,6 +1402,7 @@ if(WIN32)
     add_library(clips SHARED )
     target_link_libraries(clips ${OBJNAMES})
     add_library(clips-static ${OBJNAMES})
+    target_link_libraries(clips-static ${OBJNAMES})
     add_executable(clipscli)
     if(static-cli)
         set_property(TARGET clipscli PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")  # static link MSVC Runtime
