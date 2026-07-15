@@ -47,7 +47,8 @@ jobs:
         run:
           cd clipspy-0.3.3 ;
           python3 setup.py bdist_wheel ;
-      - name: build static 6.40 release
+      # 6.40 is kept as a build-only regression check (not published).
+      - name: build static 6.40 release (check only)
         run:
           mkdir cmake-build-static-640-release ;
           cd cmake-build-static-640-release ;
@@ -55,10 +56,8 @@ jobs:
           cmake --build .  --config Release  ;
           sudo cmake --install . ;
           cd .. ;
-          mkdir -p release-artifacts ;
-          zip release-artifacts/clips-static-640-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/include/clips-640/*.h /usr/lib/libclips* /usr/lib/static/libclips* ;
           file /usr/bin/clipscli  ;
-      - name: build dynamic 6.40 release
+      - name: build dynamic 6.40 release (check only)
         run:
           mkdir cmake-build-dynamic-640-release ;
           cd cmake-build-dynamic-640-release ;
@@ -67,12 +66,42 @@ jobs:
           ctest;
           sudo cmake --install . ;
           cd .. ;
-          mkdir -p release-artifacts ;
-          zip release-artifacts/clips-640-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/include/clips-640/*.h /usr/lib/libclips* /usr/lib/static/libclips* ;
           file /usr/bin/clipscli  ;
       - name: build clipspy-1.0.0
         run:
           cd clipspy-1.0.0 ;
+          python3 setup.py bdist_wheel ;
+          cd dist ;
+          pip3 install --break-system-packages --upgrade --force-reinstall *.whl ;
+          sudo ldconfig ;
+          python3 -c "import clips" ;
+      # 6.4.1 + clipspy-1.0.6 are the published versions.
+      - name: build static 6.4.1 release
+        run:
+          mkdir cmake-build-static-641-release ;
+          cd cmake-build-static-641-release ;
+          cmake -Dbuild-641-6=ON -Dbuild-640=OFF -Dstatic-cli=ON  -DCMAKE_INSTALL_PREFIX=/usr .. ;
+          cmake --build .  --config Release  ;
+          sudo cmake --install . ;
+          cd .. ;
+          mkdir -p release-artifacts ;
+          zip release-artifacts/clips-static-641-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/lib/libclips* /usr/lib/static/libclips* ;
+          file /usr/bin/clipscli  ;
+      - name: build dynamic 6.4.1 release
+        run:
+          mkdir cmake-build-dynamic-641-release ;
+          cd cmake-build-dynamic-641-release ;
+          cmake -Dbuild-641-6=ON -Dbuild-640=OFF -Dstatic-cli=OFF -DCMAKE_INSTALL_PREFIX=/usr .. ;
+          cmake --build .  --config Release  ;
+          ctest;
+          sudo cmake --install . ;
+          cd .. ;
+          mkdir -p release-artifacts ;
+          zip release-artifacts/clips-641-${GITHUB_RUN_NUMBER}.zip  /usr/bin/clipscli /usr/lib/libclips* /usr/lib/static/libclips* ;
+          file /usr/bin/clipscli  ;
+      - name: build clipspy-1.0.6
+        run:
+          cd clipspy-1.0.6 ;
           python3 setup.py bdist_wheel ;
           cd dist ;
           pip3 install --break-system-packages --upgrade --force-reinstall *.whl ;
@@ -86,5 +115,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
-          name: clipspy-1.0.0-wheel
-          path: clipspy-1.0.0/dist/*.whl
+          name: clipspy-1.0.6-wheel
+          path: clipspy-1.0.6/dist/*.whl

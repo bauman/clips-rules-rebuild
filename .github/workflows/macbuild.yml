@@ -29,23 +29,33 @@ jobs:
       # NOTE: mac builds are dynamic-only. The static-cli path passes `-static`
       # linker flags, which macOS does not support (no static libc / crt0.o).
       # Prefix is /usr/local because /usr is SIP-protected and not writable.
-      - name: build dynamic 6.40 release
+      # 6.40 is kept as a build-only regression check (not published).
+      - name: build dynamic 6.40 release (check only)
         run: |
           mkdir cmake-build-dynamic-640-release
           cd cmake-build-dynamic-640-release
-          cmake -Dbuild-640=ON -Dbuild-641-6=OFF -Dstatic-cli=OFF -DCMAKE_INSTALL_PREFIX=/usr/local ..
+          cmake -Dbuild-640=ON -Dbuild-641-6=OFF -Dstatic-cli=OFF ..
+          cmake --build . --config Release
+          ctest
+
+      # 6.4.1 + clipspy-1.0.6 are the published versions.
+      - name: build dynamic 6.4.1 release
+        run: |
+          mkdir cmake-build-dynamic-641-release
+          cd cmake-build-dynamic-641-release
+          cmake -Dbuild-641-6=ON -Dbuild-640=OFF -Dstatic-cli=OFF -DCMAKE_INSTALL_PREFIX=/usr/local ..
           cmake --build . --config Release
           ctest
           sudo cmake --install .
           cd ..
           mkdir -p release-artifacts
-          zip release-artifacts/clips-640-mac-${GITHUB_RUN_NUMBER}.zip /usr/local/bin/clipscli /usr/local/include/clips-640/*.h /usr/local/lib/libclips*
+          zip release-artifacts/clips-641-mac-${GITHUB_RUN_NUMBER}.zip /usr/local/bin/clipscli /usr/local/lib/libclips*
           file /usr/local/bin/clipscli
 
-      - name: build clipspy-1.0.0
+      - name: build clipspy-1.0.6
         run: |
-          cd clipspy-1.0.0
-          LIBRARY_PATH=/usr/local/lib CPATH=/usr/local/include/clips-640 python3 setup.py bdist_wheel
+          cd clipspy-1.0.6
+          LIBRARY_PATH=/usr/local/lib python3 setup.py bdist_wheel
           ls dist
           pip3 install --upgrade --force-reinstall dist/*.whl
           cd ..
@@ -59,5 +69,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
-          name: clipspy-1.0.0-wheel-mac
-          path: clipspy-1.0.0/dist/*.whl
+          name: clipspy-1.0.6-wheel-mac
+          path: clipspy-1.0.6/dist/*.whl
