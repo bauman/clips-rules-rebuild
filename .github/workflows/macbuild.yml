@@ -49,7 +49,7 @@ jobs:
           sudo cmake --install .
           cd ..
           mkdir -p release-artifacts
-          zip release-artifacts/clips-641-mac-${GITHUB_RUN_NUMBER}.zip /usr/local/bin/clipscli /usr/local/lib/libclips*
+          zip release-artifacts/clips-641-mac-${GITHUB_RUN_NUMBER}.zip /usr/local/bin/clipscli /usr/local/include/clips-641/*.h /usr/local/lib/libclips*
           file /usr/local/bin/clipscli
 
       - name: build clipspy-1.0.6

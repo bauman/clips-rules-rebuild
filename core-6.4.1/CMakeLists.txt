@@ -1387,6 +1387,9 @@ add_library(watch OBJECT watch.c setup.h envrnmnt.h entities.h usrsetup.h argacc
 
 
 
+# public headers to install (all CLIPS headers; clips.h transitively includes the rest)
+file(GLOB HEADER_FILES "${CMAKE_CURRENT_SOURCE_DIR}/*.h")
+
 if(WIN32)
 
 else()
@@ -1411,7 +1414,7 @@ else()
         target_link_libraries(clipscli main clips )
         target_compile_options(clipscli PUBLIC "-fpic")
     endif()
-    install(FILES ${HEADER_FILES} DESTINATION include)
+    install(FILES ${HEADER_FILES} DESTINATION include/clips-641)
     install(TARGETS clipscli clips clips-static
             RUNTIME DESTINATION bin
             LIBRARY DESTINATION lib
