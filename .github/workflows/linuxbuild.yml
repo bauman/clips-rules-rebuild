@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-matrix:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -138,3 +138,19 @@ jobs:
         with:
           name: clipspy-1.0.6-wheel-${{ matrix.os }}
           path: clipspy-1.0.6/dist/*.whl
+
+  # Aggregate the matrix legs into a single "build" status check. Branch
+  # protection requires the context "build"; with a matrix each leg is reported
+  # as "build (<os>)", so this job restores a stable, matrix-agnostic "build"
+  # check that is green only when every leg succeeded.
+  build:
+    if: always()
+    needs: build-matrix
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all matrix legs passed
+        run: |
+          if [ "${{ needs.build-matrix.result }}" != "success" ]; then
+            echo "build-matrix result: ${{ needs.build-matrix.result }}"
+            exit 1
+          fi
