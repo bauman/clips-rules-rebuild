@@ -45,15 +45,17 @@ int see_if_it_works() {
 			"    (slot basef (type FLOAT))"
 			"    (slot cubedf (type FLOAT))"
 			"    (slot cubedi (type INTEGER))"
+			"    (slot complete (type SYMBOL) (default FALSE))"
 			")");
 
 		build_result += Build(theEnv, ""
 			"(defrule dothemath"
-			"   ?d <- (maths (basei ?bi) (basef ?bf) (cubedf 0.0) (cubedi 0))"
+			"   ?d <- (maths (basei ?bi) (basef ?bf) (complete FALSE))"
 			"   =>"
 			"   (modify ?d "
 			"          (cubedf (Cube ?bf)) "
 			"          (cubedi (Cube ?bi))"
+			"          (complete TRUE)"
 			"   )"
 			" )");
 		
@@ -91,6 +93,10 @@ int see_if_it_works() {
 					double expectedf = 2.7 * 2.7 * 2.7;
 					if (returnValue.floatValue->contents - expectedf > 0.1 || returnValue.floatValue->contents - expectedf < -0.1) {
 						math_rule_fired += 1;  // whatever, just note the error
+					}
+					gse = GetFactSlot(n, "complete", &returnValue);
+					if (strcmp(returnValue.lexemeValue->contents, "TRUE") != 0) {
+						math_rule_fired += 1;  // rule didn't set the completion marker
 					}
 				}
 			}
