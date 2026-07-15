@@ -8,9 +8,12 @@ INCLUDE_DIRECTORIES(../core-6.4.1/)
 
 add_subdirectory ("runtime-loader")
 
-get_filename_component(_fullpath "bdi" REALPATH)
-if (EXISTS "${_fullpath}")
-	add_subdirectory(bdi)
+# bdi (uthash examples) does not compile under MSVC; skip it on Windows.
+if (NOT WIN32)
+	get_filename_component(_fullpath "bdi" REALPATH)
+	if (EXISTS "${_fullpath}")
+		add_subdirectory(bdi)
+	endif ()
 endif ()
 
 

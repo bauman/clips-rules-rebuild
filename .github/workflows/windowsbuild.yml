@@ -93,6 +93,16 @@ jobs:
           $clipsdir = python -c "import os, importlib.util; print(os.path.dirname(importlib.util.find_spec('clips').origin))" ;
           Copy-Item c:\usr\bin\clips.dll $clipsdir ;
           python -c "import clips" ;
+      # First step of the Windows 6.4.1 port: prove core-6.4.1 compiles/links/tests under
+      # MSVC. Once green, this replaces the 6.40 publish steps.
+      - name: build 6.4.1 (windows port check)
+        run:
+          mkdir cmake-build-641-release ;
+          cd cmake-build-641-release ;
+          cmake -Dstatic-cli=OFF -Dbuild-641-6=ON -Dbuild-640=OFF -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=True .. ;
+          cmake --build . --target ALL_BUILD --config Release  ;
+          ctest -C Release ;
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } ;
       - uses: actions/upload-artifact@v4
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:

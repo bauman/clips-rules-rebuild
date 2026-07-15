@@ -1,5 +1,12 @@
-set(CMAKE_C_OUTPUT_EXTENSION .o)
-add_compile_options("-fpic")
+# These must be set before the OBJECT libraries below are defined so the flags/defines
+# apply to their compilation. WIN_MVC selects the MSVC code paths in the CLIPS source.
+if(WIN32)
+	add_definitions(-DWIN_MVC=1)
+	add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+else()
+	set(CMAKE_C_OUTPUT_EXTENSION .o)
+	add_compile_options("-fpic")
+endif()
 set( OBJNAMES
         agenda analysis argacces bload bmathfun bsave
         classcom classexm classfun classinf classini
@@ -1391,6 +1398,22 @@ add_library(watch OBJECT watch.c setup.h envrnmnt.h entities.h usrsetup.h argacc
 file(GLOB HEADER_FILES "${CMAKE_CURRENT_SOURCE_DIR}/*.h")
 
 if(WIN32)
+
+    add_library(clips SHARED )
+    target_link_libraries(clips ${OBJNAMES})
+    add_library(clips-static ${OBJNAMES})
+    add_executable(clipscli)
+    if(static-cli)
+        set_property(TARGET clipscli PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")  # static link MSVC Runtime
+        target_link_libraries(clipscli main clips-static)
+    else()
+        target_link_libraries(clipscli main clips)
+    endif()
+    install(FILES ${HEADER_FILES} DESTINATION include/clips-641)
+    install(TARGETS clipscli clips clips-static
+            RUNTIME DESTINATION bin
+            LIBRARY DESTINATION lib
+            ARCHIVE DESTINATION lib/static)
 
 else()
 
