@@ -6,6 +6,18 @@ if(WIN32)
 else()
 	set(CMAKE_C_OUTPUT_EXTENSION .o)
 	add_compile_options("-fpic")
+	# Match the upstream Makefile `release` recipe: `-std=c99 -O3 -fno-strict-aliasing` plus
+	# the `-D<CLIPS_OS>` define (-O3 already comes from the CMake Release config).
+	#   * -fno-strict-aliasing: without it, gcc arm64 miscompiles CLIPS's aliasing violations
+	#     (009_STRING_BDI fails on arm64).
+	#   * -DLINUX / -DDARWIN: setup.h defaults these to 0 and falls back to GENERIC=1 unless
+	#     defined, so without this we were NOT compiling the OS-specific sysdep code paths.
+	add_compile_options("-std=c99" "-fno-strict-aliasing")
+	if(APPLE)
+		add_definitions(-DDARWIN)
+	else()
+		add_definitions(-DLINUX)
+	endif()
 endif()
 set( OBJNAMES
         agenda analysis argacces bload bmathfun bsave

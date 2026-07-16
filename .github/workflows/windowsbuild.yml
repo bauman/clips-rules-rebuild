@@ -11,8 +11,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    runs-on: windows-2022
+  build-matrix:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            arch: x64
+          - os: windows-2025-vs2026
+            arch: x64
+          - os: windows-11-vs2026-arm
+            arch: arm64
     steps:
       - uses: actions/checkout@v4
 
@@ -20,7 +30,7 @@ jobs:
         # puts cl.exe / dumpbin.exe on PATH (not there by default on hosted runners)
         uses: ilammy/msvc-dev-cmd@v1
         with:
-          arch: x64
+          arch: ${{ matrix.arch }}
 
       - name: set up Python
         uses: actions/setup-python@v5
@@ -101,7 +111,7 @@ jobs:
           cmake --install . ;
           cd .. ;
           md -Force release-artifacts  ;
-          powershell -C  "&  Compress-Archive -Path C:\usr -DestinationPath release-artifacts\clips-static-642-$env:GITHUB_RUN_NUMBER.zip " ;
+          powershell -C  "&  Compress-Archive -Path C:\usr -DestinationPath release-artifacts\clips-static-642-${{ matrix.os }}-$env:GITHUB_RUN_NUMBER.zip " ;
           dumpbin /dependents C:/usr/bin/clipscli.exe  ;
       - name: build dynamic 6.4.2 release
         run:
@@ -115,11 +125,27 @@ jobs:
           cmake --install . ;
           cd .. ;
           md -Force release-artifacts  ;
-          powershell -C  "&  Compress-Archive -Path C:\usr -DestinationPath release-artifacts\clips-642-$env:GITHUB_RUN_NUMBER.zip " ;
+          powershell -C  "&  Compress-Archive -Path C:\usr -DestinationPath release-artifacts\clips-642-${{ matrix.os }}-$env:GITHUB_RUN_NUMBER.zip " ;
           dumpbin /dependents C:/usr/bin/clipscli.exe  ;
 
       - uses: actions/upload-artifact@v4
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
-          name: release
+          name: release-${{ matrix.os }}
           path: release-artifacts\
+
+  # Aggregate the matrix legs into a single "build" status check. Branch
+  # protection requires the context "build"; with a matrix each leg is reported
+  # as "build (<os>, <arch>)", so this job restores a stable, matrix-agnostic
+  # "build" check that is green only when every leg succeeded.
+  build:
+    if: always()
+    needs: build-matrix
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all matrix legs passed
+        run: |
+          if [ "${{ needs.build-matrix.result }}" != "success" ]; then
+            echo "build-matrix result: ${{ needs.build-matrix.result }}"
+            exit 1
+          fi
