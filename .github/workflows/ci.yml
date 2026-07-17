@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  # The three OS builds run as reusable workflows, so all of their matrix legs'
+  # artifacts land in THIS single run and can be aggregated by the bundle job.
+  linux:
+    uses: ./.github/workflows/linuxbuild.yml
+  windows:
+    uses: ./.github/workflows/windowsbuild.yml
+  mac:
+    uses: ./.github/workflows/macbuild.yml
+
+  # Single required status check for branch protection (context "build"): green
+  # only when all three OS builds — every matrix leg — succeeded. Runs on PRs and
+  # pushes (if: always()) so the "build" context is always reported.
+  build:
+    if: always()
+    needs: [ linux, windows, mac ]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all OS builds passed
+        run: |
+          echo "linux=${{ needs.linux.result }} windows=${{ needs.windows.result }} mac=${{ needs.mac.result }}"
+          if [ "${{ needs.linux.result }}" != "success" ] \
+          || [ "${{ needs.windows.result }}" != "success" ] \
+          || [ "${{ needs.mac.result }}" != "success" ]; then
+            exit 1
+          fi
+
+  # Collect every leg's artifacts into ONE organized zip. Only on push to main
+  # (matches the per-leg upload policy); on PRs the legs upload nothing.
+  bundle:
+    needs: [ linux, windows, mac ]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download every leg's artifacts (this run)
+        uses: actions/download-artifact@v4
+        with:
+          path: incoming
+
+      - name: Organize into an <os-family>/<leg>/ tree
+        run: |
+          set -eu
+          shopt -s nullglob
+          mkdir -p bundle
+          for d in incoming/*/; do
+            name=$(basename "$d")
+            case "$name" in
+              *ubuntu-*)  family=linux ;;
+              *windows-*) family=windows ;;
+              *macos-*)   family=macos ;;
+              *)          family=other ;;
+            esac
+            # strip the artifact-name prefix to recover the leg (os label), so the
+            # release zip(s) and the wheel for a leg share one directory
+            leg=$(printf '%s' "$name" | sed -E 's/^release-//; s/^clipspy-[0-9.]+-wheel-//')
+            dest="bundle/$family/$leg"
+            mkdir -p "$dest"
+            cp -a "$d." "$dest"/
+          done
+          echo "=== combined bundle tree ==="
+          find bundle -type f | sort
+
+      - name: Upload the single combined artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: clips-all-${{ github.run_number }}
+          path: bundle
