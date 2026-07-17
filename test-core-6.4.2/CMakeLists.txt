@@ -6,7 +6,9 @@ add_definitions("-DDEFTEMPLATE_CONSTRUCT")
 
 INCLUDE_DIRECTORIES(../core-6.4.2/)
 
-add_subdirectory ("runtime-loader")
+# runtime-loader was promoted to a top-level component (../runtime-loader), added
+# by the root CMakeLists before this dir. The `cube` target it defines is reused
+# by the Windows 007b_win test below.
 
 # bdi (uthash examples) does not compile under MSVC; skip it on Windows.
 if (NOT WIN32)

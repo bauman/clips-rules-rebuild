@@ -31,6 +31,13 @@ if (build-642)
 endif()
 enable_testing()
 
+# runtime-loader is a first-class app/library built against the primary core
+# (6.4.2). Added after enable_testing() so its CTest registers, and before the
+# test-core-* dirs so its `cube` target exists when 007b_win depends on it.
+if (build-642)
+	add_subdirectory ("runtime-loader")
+endif()
+
 
 if (build-631)
 	# there are no 6.31 tests
