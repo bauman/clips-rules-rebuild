@@ -20,6 +20,8 @@ int see_if_it_works() {
 		
 		Reset(theEnv);
 		build_result = setup_dispatcher(theEnv);
+		build_result = setup_dispatcher(theEnv);
+
 		if (build_result != BE_NO_ERROR) {
 			return -1;
 		}

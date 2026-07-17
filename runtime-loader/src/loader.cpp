@@ -17,12 +17,12 @@ void* free_lib(void* v_hinstLib) {
 #ifdef WIN32
         HINSTANCE* hinstLib_p = (HINSTANCE*)v_hinstLib;
         HINSTANCE hinstLib = *hinstLib_p;
-        BOOL freed = FreeLibrary(hinstLib);
+        bool freed = (FreeLibrary(hinstLib) != 0);   /* FreeLibrary: nonzero == success */
 #else
-        bool freed = dlclose(v_hinstLib);
+        bool freed = (dlclose(v_hinstLib) == 0);     /* dlclose: 0 == success (opposite of FreeLibrary) */
 #endif
         if (freed) {
-            result = NULL;
+            result = NULL;   /* NULL signals "unloaded" to callers, on both platforms */
         }
     }
     return result;
