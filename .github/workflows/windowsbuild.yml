@@ -1,14 +1,7 @@
 name: Windows Build
 
 on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
-  cancel-in-progress: true
+  workflow_call:   # reusable: invoked by ci.yml (the orchestrator handles triggers + concurrency)
 
 jobs:
   build-matrix:
@@ -133,19 +126,3 @@ jobs:
         with:
           name: release-${{ matrix.os }}
           path: release-artifacts\
-
-  # Aggregate the matrix legs into a single "build" status check. Branch
-  # protection requires the context "build"; with a matrix each leg is reported
-  # as "build (<os>, <arch>)", so this job restores a stable, matrix-agnostic
-  # "build" check that is green only when every leg succeeded.
-  build:
-    if: always()
-    needs: build-matrix
-    runs-on: ubuntu-latest
-    steps:
-      - name: Verify all matrix legs passed
-        run: |
-          if [ "${{ needs.build-matrix.result }}" != "success" ]; then
-            echo "build-matrix result: ${{ needs.build-matrix.result }}"
-            exit 1
-          fi
