@@ -207,6 +207,16 @@ bool UnDefineFuncIfRequired(
 	const char* function) {
 	bool success = false;
 	Deffunction* func = FindDeffunction(env, function);
+	if (!func) {
+		/* No deffunction bound in THIS environment -- e.g. the unload fact was
+		   asserted in an env that never loaded the function, while the global
+		   table entry exists via another env (unload is process-global, F2).
+		   Nothing to undefine here; vacuous success so the caller proceeds with
+		   the global removal. DeffunctionIsDeletable dereferences its argument,
+		   so this must be checked (F7). */
+		out->integerValue = CreateInteger(env, 0);
+		return true;
+	}
 	bool deletable = DeffunctionIsDeletable(func);
 	if (deletable) {
 		bool deleted = Undeffunction(func, env);
@@ -239,41 +249,48 @@ void UnLoader(
 	HASH_FIND_STR(functions, function.lexemeValue->contents, func_exists);
 	if (func_exists) {
 		HASH_FIND_STR(libraries, func_exists->libname, lib_exists);
-		if (lib_exists) {
-			struct function_table* other = NULL;
-			struct function_table* other_tmp = NULL;
-			bool library_still_referenced = false;
+	}
+	if (!func_exists || !lib_exists) {
+		/* Not in the global table: never loaded, or already unloaded
+		   process-globally by another environment (F2). Unlike the -200 path this
+		   IS reachable -- the unloadlib rule fires on any hand-asserted
+		   (loaded 1) fact and writes `out` into the fact's `loaded` slot -- so
+		   `out` must be a defined value, not left unset as garbage (F8). */
+		out->integerValue = CreateInteger(env, -32);
+	} else {
+		struct function_table* other = NULL;
+		struct function_table* other_tmp = NULL;
+		bool library_still_referenced = false;
 
-			/* Undefine the per-environment deffunction (operates on env, not the
-			   tables), then remove the function being unloaded from the global
-			   table. */
-			UnDefineFuncIfRequired(env, udfc, out, (const char*)function.lexemeValue->contents);
-			HASH_DEL(functions, func_exists);
+		/* Undefine the per-environment deffunction (operates on env, not the
+		   tables), then remove the function being unloaded from the global
+		   table. */
+		UnDefineFuncIfRequired(env, udfc, out, (const char*)function.lexemeValue->contents);
+		HASH_DEL(functions, func_exists);
 
-			/* Only unload the library once NO remaining function references it.
-			   Unloading it while a sibling function (same library) is still in the
-			   table would leave that sibling's ->ref dangling into unmapped code
-			   -- a segfault on its next Dispatch (F1). func_exists is out of the
-			   hash now but still allocated, so its libname is valid to compare. */
-			HASH_ITER(hh, functions, other, other_tmp) {
-				if (strcmp(other->libname, func_exists->libname) == 0) {
-					library_still_referenced = true;
-					break;
-				}
+		/* Only unload the library once NO remaining function references it.
+		   Unloading it while a sibling function (same library) is still in the
+		   table would leave that sibling's ->ref dangling into unmapped code
+		   -- a segfault on its next Dispatch (F1). func_exists is out of the
+		   hash now but still allocated, so its libname is valid to compare. */
+		HASH_ITER(hh, functions, other, other_tmp) {
+			if (strcmp(other->libname, func_exists->libname) == 0) {
+				library_still_referenced = true;
+				break;
 			}
-			if (!library_still_referenced) {
-				lib_exists->ref = free_lib(lib_exists->ref);
-				if (!lib_exists->ref) {
-					HASH_DEL(libraries, lib_exists);
-					free(lib_exists->libname);
-					free(lib_exists);
-				}
-			}
-
-			free(func_exists->libname);
-			free(func_exists->function);
-			free(func_exists);
 		}
+		if (!library_still_referenced) {
+			lib_exists->ref = free_lib(lib_exists->ref);
+			if (!lib_exists->ref) {
+				HASH_DEL(libraries, lib_exists);
+				free(lib_exists->libname);
+				free(lib_exists);
+			}
+		}
+
+		free(func_exists->libname);
+		free(func_exists->function);
+		free(func_exists);
 	}
 	unlock_write(ensure_lock());
 }
@@ -378,6 +395,14 @@ static BuildError LoadErrorRules(Environment* env) {
 		"          (error \"Function is in use, triggererd reload\") "
 		"          (action \"load\") "
 		"          (loaded 0) "
+		"   )"
+		" )");
+	build_result = Build(env, ""
+		"(defrule unloader-not-loaded"
+		"   ?d <- (functions (loaded -32))"
+		"   =>"
+		"   (modify ?d "
+		"          (error \"Function is not loaded - nothing to unload (it may have been unloaded by another environment)\") "
 		"   )"
 		" )");
 

@@ -103,6 +103,24 @@ add_executable(test_udf_registration_failure tests/udf_registration_failure.c)
 target_link_libraries(test_udf_registration_failure dispatcher clips)
 add_test(test_udf_registration_failure test_udf_registration_failure)
 
+# F7: unloading via an env that never loaded the function (no local deffunction)
+#     must not crash on the NULL FindDeffunction result.
+add_executable(test_unload_without_deffunction tests/unload_without_deffunction.c)
+target_link_libraries(test_unload_without_deffunction dispatcher clips)
+add_test(test_unload_without_deffunction test_unload_without_deffunction)
+add_dependencies(test_unload_without_deffunction cube)
+
+# F8: unloading a function not in the global table (never loaded, or already
+#     unloaded) must set a defined result (-32), never leave `out` unset.
+add_executable(test_unload_not_loaded tests/unload_not_loaded.c)
+target_link_libraries(test_unload_not_loaded dispatcher clips)
+add_test(test_unload_not_loaded test_unload_not_loaded)
+add_dependencies(test_unload_not_loaded cube)
+# the F8 failure mode is an unset UDFValue driving the rule loop forever (verified:
+# with the fix reverted this test spins, it doesn't exit) -- cap it so a regression
+# fails in seconds instead of hanging CI until ctest's default 1500s timeout.
+set_tests_properties(test_unload_not_loaded PROPERTIES TIMEOUT 60)
+
 if (WIN32)
 	# no rpath on windows: copy clips.dll next to each exe, and the plugin DLLs
 	# next to the test exes that LoadLibrary them at runtime, so they resolve.
@@ -124,6 +142,12 @@ if (WIN32)
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:cube>  $<TARGET_FILE_DIR:test_concurrent_load>)
 	add_custom_command(TARGET test_udf_registration_failure POST_BUILD
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips> $<TARGET_FILE_DIR:test_udf_registration_failure>)
+	add_custom_command(TARGET test_unload_without_deffunction POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips> $<TARGET_FILE_DIR:test_unload_without_deffunction>
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:cube>  $<TARGET_FILE_DIR:test_unload_without_deffunction>)
+	add_custom_command(TARGET test_unload_not_loaded POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips> $<TARGET_FILE_DIR:test_unload_not_loaded>
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:cube>  $<TARGET_FILE_DIR:test_unload_not_loaded>)
 	add_custom_command(TARGET runtime-clips POST_BUILD
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips> $<TARGET_FILE_DIR:runtime-clips>)
 endif ()
