@@ -107,12 +107,26 @@ int PerformLoading(const char* library, const char* function) {
 			}
 		}
 	}
+	/* Final success check -- re-verify libname, not just presence. If we lost an
+	   F4 race (a DIFFERENT library registered this name between the up-front check
+	   and here), the entry belongs to that other library; reporting success would
+	   silently bind this caller into it. Refuse with -4, the same verdict as the
+	   up-front check -- this is what shrinks the race window from "may misroute" to
+	   "refused". Single-threaded this branch is unreachable (the up-front check
+	   fires first); it is the concurrent-load guard. A race loser may leave its own
+	   library loaded-but-unreferenced until teardown_dispatcher() -- a bounded,
+	   expert-path cost, not a correctness problem. The window is not fully closed
+	   (dispatcher.h documents the residual best-effort nature). */
 	lock_read(ensure_lock());
 	HASH_FIND_STR(functions, function, func_exists);
-	unlock_read(ensure_lock());
-	if (func_exists) {
+	if (func_exists != NULL && strcmp(func_exists->libname, library) != 0) {
+		unlock_read(ensure_lock());
+		return -4;
+	}
+	if (func_exists != NULL) {
 		result = 1;
 	}
+	unlock_read(ensure_lock());
 	return result;
 }
 
@@ -325,52 +339,68 @@ AddUDFError LoadUserFunctions(
 	return err;
 }
 
+/* Build `construct` in `env`, returning the FIRST real error across a chain.
+   BuildError is an enumeration (BE_NO_ERROR=0, BE_COULD_NOT_BUILD_ERROR=1,
+   BE_CONSTRUCT_NOT_FOUND_ERROR=2, BE_PARSING_ERROR=3), NOT a count -- so folding
+   results with `+=` is wrong: two failures would sum to an out-of-range value
+   (e.g. 2+3=5) that is no valid enumerator, corrupting the reported error even
+   though it stays coincidentally non-zero. Instead each caller threads its running
+   result through `first_err`; every construct is still attempted (they are
+   independent), and the first failure is the one reported. */
+static BuildError build_step(Environment* env, const char* construct, BuildError first_err) {
+	BuildError err = Build(env, construct);
+	if (err != BE_NO_ERROR && first_err == BE_NO_ERROR) {
+		first_err = err;
+	}
+	return first_err;
+}
+
 static BuildError LoadErrorRules(Environment* env) {
-	BuildError build_result;
-	build_result = Build(env, ""
+	BuildError build_result = BE_NO_ERROR;
+	build_result = build_step(env, ""
 		"(defrule loader-invalid-args"
 		"   ?d <- (functions (loaded -200))"
 		"   =>"
 		"   (modify ?d "
 		"          (error \"Invalid Arguments - Must be library, function as strings\") "
 		"   )"
-		" )");
+		" )", build_result);
 
-	build_result = Build(env, ""
+	build_result = build_step(env, ""
 		"(defrule loader-invalid-function-name"
 		"   ?d <- (functions (loaded -1))"
 		"   =>"
 		"   (modify ?d "
 		"          (error \"Unable to build rule from loaded library - use ASCII characters for function\") "
 		"   )"
-		" )");
+		" )", build_result);
 
-	build_result = Build(env, ""
+	build_result = build_step(env, ""
 		"(defrule loader-invalid-function-length"
 		"   ?d <- (functions (loaded -2))"
 		"   =>"
 		"   (modify ?d "
 		"          (error \"Function name is too long, limit function name to 256 characters\") "
 		"   )"
-		" )");
+		" )", build_result);
 
-	build_result = Build(env, ""
+	build_result = build_step(env, ""
 		"(defrule loader-load-failed"
 		"   ?d <- (functions (loaded -3))"
 		"   =>"
 		"   (modify ?d "
 		"          (error \"Unable to load the requested library or function\") "
 		"   )"
-		" )");
-	build_result = Build(env, ""
+		" )", build_result);
+	build_result = build_step(env, ""
 		"(defrule loader-name-collision"
 		"   ?d <- (functions (loaded -4))"
 		"   =>"
 		"   (modify ?d "
 		"          (error \"Function name already loaded from a different library - function names must be unique across libraries\") "
 		"   )"
-		" )");
-	build_result = Build(env, ""
+		" )", build_result);
+	build_result = build_step(env, ""
 		"(defrule loader-already-defined"
 		"   ?d <- (functions (loaded -5))"
 		"   =>"
@@ -378,16 +408,16 @@ static BuildError LoadErrorRules(Environment* env) {
 		"          (error \"Function was already defined, not redefining\") "
 		"          (loaded 1) "
 		"   )"
-		" )");
-	build_result = Build(env, ""
+		" )", build_result);
+	build_result = build_step(env, ""
 		"(defrule unloader-not-deletable"
 		"   ?d <- (functions (loaded -30))"
 		"   =>"
 		"   (modify ?d "
 		"          (error \"Unable to delete the function\") "
 		"   )"
-		" )");
-	build_result = Build(env, ""
+		" )", build_result);
+	build_result = build_step(env, ""
 		"(defrule unloader-unable-to-delete"
 		"   ?d <- (functions (loaded -31))"
 		"   =>"
@@ -396,15 +426,15 @@ static BuildError LoadErrorRules(Environment* env) {
 		"          (action \"load\") "
 		"          (loaded 0) "
 		"   )"
-		" )");
-	build_result = Build(env, ""
+		" )", build_result);
+	build_result = build_step(env, ""
 		"(defrule unloader-not-loaded"
 		"   ?d <- (functions (loaded -32))"
 		"   =>"
 		"   (modify ?d "
 		"          (error \"Function is not loaded - nothing to unload (it may have been unloaded by another environment)\") "
 		"   )"
-		" )");
+		" )", build_result);
 
 	return build_result;
 }
@@ -419,7 +449,7 @@ static void loader_env_destroyed(Environment* env) {
 
 
 BuildError setup_dispatcher(Environment* env) {
-	BuildError  build_result = 0;
+	BuildError  build_result = BE_NO_ERROR;
 
 	/* The library/function hash tables are process-global (shared across every
 	   environment) and are guarded by a single process-wide lock. Force its
@@ -452,33 +482,40 @@ BuildError setup_dispatcher(Environment* env) {
 		loader_env_register();
 	}
 
-	build_result += Build(env, ""
+	build_result = build_step(env, ""
 		"(deftemplate functions"
 		"    (slot library (type STRING))"
 		"    (slot function (type STRING))"
 		"    (slot action (type STRING) (default \"load\"))"
 		"    (slot loaded (type INTEGER) (default 0))"
 		"    (slot error (type STRING))"
-		")");
+		")", build_result);
 
-	build_result += Build(env, ""
+	build_result = build_step(env, ""
 		"(defrule loadlib"
 		"   ?d <- (functions (library ?lib) (function ?func) (action \"load\") (loaded 0))"
 		"   =>"
 		"   (modify ?d "
 		"          (loaded (LoadDispatch ?lib ?func)) "
 		"   )"
-		" )");
-	build_result += Build(env, ""
+		" )", build_result);
+	build_result = build_step(env, ""
 		"(defrule unloadlib"
 		"   ?d <- (functions (library ?lib) (function ?func) (action \"unload\") (loaded 1))"
 		"   =>"
 		"   (modify ?d "
 		"          (loaded (UnLoadDispatch ?lib ?func)) "
 		"   )"
-		" )");
+		" )", build_result);
 
-	build_result += LoadErrorRules(env);
+	/* Always build the error rules; fold their first error in only if nothing
+	   above already failed (first-error-wins, matching build_step). */
+	{
+		BuildError rules_err = LoadErrorRules(env);
+		if (build_result == BE_NO_ERROR) {
+			build_result = rules_err;
+		}
+	}
 	return build_result;
 }
 

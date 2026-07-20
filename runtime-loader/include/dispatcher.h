@@ -52,10 +52,13 @@
  *     they require quiescence. Unloading (or tearing down) while another thread
  *     is dispatching or loading the SAME library is undefined (a freed entry
  *     could be used). This is the "unload is expert" contract above.
- *   - The unique-name constraint is enforced best-effort: two threads that
- *     concurrently load the same name from different libraries (i.e. concurrently
- *     violate the constraint) may not be refused. A caller that respects the
- *     constraint never hits this.
+ *   - The unique-name constraint holds under concurrency: if two threads load the
+ *     same name from different libraries at once, exactly one wins and the other
+ *     is refused (-4) -- the load never silently misroutes into the wrong library
+ *     (the success path re-checks the owning library, not just the name). The one
+ *     residual, best-effort part is cleanup, not correctness: the refused loser may
+ *     leave its own library dlopen'd-but-unreferenced until teardown_dispatcher()
+ *     reclaims it. A caller that respects the constraint never hits any of this.
  */
 
 #include "clips.h"

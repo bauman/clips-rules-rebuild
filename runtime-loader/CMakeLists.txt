@@ -121,6 +121,22 @@ add_dependencies(test_unload_not_loaded cube)
 # fails in seconds instead of hanging CI until ctest's default 1500s timeout.
 set_tests_properties(test_unload_not_loaded PROPERTIES TIMEOUT 60)
 
+# setup_dispatcher must build every hardcoded construct: guards the BuildError
+# propagation fix (a malformed construct surfaces as a non-zero return) AND checks
+# each rule/template exists by name (catches silent same-name replacement, the F4
+# bug class). No plugin needed -- never loads a library.
+add_executable(test_setup_constructs tests/setup_constructs.c)
+target_link_libraries(test_setup_constructs dispatcher clips)
+add_test(test_setup_constructs test_setup_constructs)
+
+# F4 race hardening: two libraries claiming the same name concurrently must yield
+# exactly one winner + the other refused (-4), never a misrouted success. Needs
+# cube + cube2 and threads.
+add_executable(test_concurrent_name_collision tests/concurrent_name_collision.cpp)
+target_link_libraries(test_concurrent_name_collision dispatcher clips Threads::Threads)
+add_test(test_concurrent_name_collision test_concurrent_name_collision)
+add_dependencies(test_concurrent_name_collision cube cube2)
+
 if (WIN32)
 	# no rpath on windows: copy clips.dll next to each exe, and the plugin DLLs
 	# next to the test exes that LoadLibrary them at runtime, so they resolve.
@@ -148,6 +164,12 @@ if (WIN32)
 	add_custom_command(TARGET test_unload_not_loaded POST_BUILD
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips> $<TARGET_FILE_DIR:test_unload_not_loaded>
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:cube>  $<TARGET_FILE_DIR:test_unload_not_loaded>)
+	add_custom_command(TARGET test_setup_constructs POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips> $<TARGET_FILE_DIR:test_setup_constructs>)
+	add_custom_command(TARGET test_concurrent_name_collision POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips> $<TARGET_FILE_DIR:test_concurrent_name_collision>
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:cube>  $<TARGET_FILE_DIR:test_concurrent_name_collision>
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:cube2> $<TARGET_FILE_DIR:test_concurrent_name_collision>)
 	add_custom_command(TARGET runtime-clips POST_BUILD
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips> $<TARGET_FILE_DIR:runtime-clips>)
 endif ()
