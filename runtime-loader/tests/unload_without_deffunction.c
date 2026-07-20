@@ -4,6 +4,7 @@
 #include "clips.h"
 #include "dispatcher.h"
 #include "plugin_names.h"
+#include "run_bounded.h"
 
 /*
  * F7 regression: unloading a function from an environment that never loaded it.
@@ -38,7 +39,7 @@ int main(void)
 
    /* only A loads Cube */
    AssertString(a, "(functions (library \"" CUBE_LIB "\") (function \"Cube\"))");
-   Run(a, -1);
+   if (run_bounded(a, 10, 6, "env A load Cube") < 0) { return 1; }
    if (Eval(a, "(Cube 3)", &rv) != EE_NO_ERROR || rv.header->type != INTEGER_TYPE
        || rv.integerValue->contents != 27)
      { fail(&failures, "env A Cube(3) != 27 after load"); }
@@ -49,7 +50,7 @@ int main(void)
       the F7 fix this Run segfaulted. */
    AssertString(b, "(functions (library \"" CUBE_LIB "\") (function \"Cube\")"
                    " (action \"unload\") (loaded 1))");
-   Run(b, -1);
+   if (run_bounded(b, 10, 6, "env B unload Cube (no local deffunction)") < 0) { return 1; }
 
    /* B's fact must carry the defined vacuous-success result, not garbage */
    if (Eval(b, "(do-for-fact ((?f functions)) (eq ?f:function \"Cube\") ?f:loaded)", &rv) != EE_NO_ERROR

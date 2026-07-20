@@ -196,7 +196,11 @@ void DefineFuncIfRequired(
 		}
 	}
 	else {
-		out->integerValue = CreateInteger(env, -5);
+		/* The wrapper already exists and is exactly what we would build -- it
+		   dispatches BY NAME and holds no reference to any library. That is the
+		   normal state on a RELOAD (unload deliberately leaves the wrapper in
+		   place so the bounce works), so this is success, not an error. */
+		out->integerValue = CreateInteger(env, 1);
 	}
 }
 
@@ -223,6 +227,21 @@ void Loader(
 }
 
 
+/*
+ * Remove this environment's deffunction wrapper for `function`. This is the
+ * CLEANUP path only -- unloading deliberately does NOT do this (see UnLoader).
+ *
+ * The wrapper is what makes the name exist to CLIPS, so removing it is what
+ * truly retires the name: afterwards a call is an unknown-function error rather
+ * than a silent FALSE from a Dispatch miss. That distinction matters for any
+ * plugin whose legitimate result set includes FALSE (the IsOdd example returns
+ * TRUE/FALSE/FAIL -- an unloaded FALSE would be indistinguishable from "even").
+ *
+ * It can only succeed when nothing references the wrapper: CLIPS increments a
+ * deffunction's `busy` count for every construct whose body installs a call to
+ * it, so a defrule using the function blocks removal (-31). Tearing those
+ * constructs down first is the caller's job -- see dispatcher.h.
+ */
 bool UnDefineFuncIfRequired(
 	Environment* env,
 	UDFContext* udfc,
@@ -231,13 +250,10 @@ bool UnDefineFuncIfRequired(
 	bool success = false;
 	Deffunction* func = FindDeffunction(env, function);
 	if (!func) {
-		/* No deffunction bound in THIS environment -- e.g. the unload fact was
-		   asserted in an env that never loaded the function, while the global
-		   table entry exists via another env (unload is process-global, F2).
-		   Nothing to undefine here; vacuous success so the caller proceeds with
-		   the global removal. DeffunctionIsDeletable dereferences its argument,
-		   so this must be checked (F7). */
-		out->integerValue = CreateInteger(env, 0);
+		/* No wrapper bound in THIS environment (never loaded here, or already
+		   cleaned up). Nothing to remove -- vacuous success. DeffunctionIsDeletable
+		   dereferences its argument, so this must be checked (F7). */
+		out->integerValue = CreateInteger(env, 2);
 		return true;
 	}
 	bool deletable = DeffunctionIsDeletable(func);
@@ -245,14 +261,36 @@ bool UnDefineFuncIfRequired(
 		bool deleted = Undeffunction(func, env);
 		if (deleted) {
 			success = true;
-			out->integerValue = CreateInteger(env, 0);
+			out->integerValue = CreateInteger(env, 2);   /* fully retired */
 		} else {
-			out->integerValue = CreateInteger(env, -30);
+			out->integerValue = CreateInteger(env, -30); /* deletable, but delete failed */
 		}
 	} else {
-		out->integerValue = CreateInteger(env, -31);
+		out->integerValue = CreateInteger(env, -31);     /* still referenced / executing */
 	}
 	return success;
+}
+
+
+/*
+ * CleanupDispatch -- retire the function name in THIS environment by removing its
+ * wrapper. Purely the CLIPS-side teardown: it never touches the library or the
+ * global table, so it is independent of unload and may be run before it, after
+ * it, or without it at all. Notably cleanup is environment-LOCAL while unload is
+ * process-GLOBAL, so an environment can retire its own wrapper while other
+ * environments keep using the still-loaded library.
+ */
+void Cleanup(
+	Environment* env,
+	UDFContext* udfc,
+	UDFValue* out) {
+	UDFValue library, function;
+	if (!UDFNthArgument(udfc, 1, STRING_BIT, &library) || !UDFNthArgument(udfc, 2, STRING_BIT, &function))
+	{
+		out->integerValue = CreateInteger(env, -200);
+		return;
+	}
+	UnDefineFuncIfRequired(env, udfc, out, (const char*)function.lexemeValue->contents);
 }
 
 void UnLoader(
@@ -285,11 +323,25 @@ void UnLoader(
 		struct function_table* other_tmp = NULL;
 		bool library_still_referenced = false;
 
-		/* Undefine the per-environment deffunction (operates on env, not the
-		   tables), then remove the function being unloaded from the global
-		   table. */
-		UnDefineFuncIfRequired(env, udfc, out, (const char*)function.lexemeValue->contents);
+		/* Release the LIBRARY only -- deliberately do NOT touch this environment's
+		   deffunction wrapper.
+
+		   The wrapper's body is `(Dispatch <name> (expand$ ?args))`: it references
+		   the permanent Dispatch UDF and a name string, never the library. So
+		   removing the global table entry and closing the library fully releases
+		   it, and the surviving wrapper is inert -- Dispatch misses the table and
+		   fails safe to FALSE (F2; test_cross_env_unload already exercises exactly
+		   this state across environments).
+
+		   Keeping it is what makes unload a BOUNCE: rules that call the function
+		   keep compiling and binding, so the library can be unloaded, replaced on
+		   disk, and reloaded with no rule teardown at all. Deleting the wrapper
+		   here is what used to make unload fail (-31) whenever any rule referenced
+		   the function -- blocking the very update cycle unload exists for.
+
+		   Retiring the NAME is a separate, explicit step: see Cleanup(). */
 		HASH_DEL(functions, func_exists);
+		out->integerValue = CreateInteger(env, 0);   /* unloaded */
 
 		/* Only unload the library once NO remaining function references it.
 		   Unloading it while a sibling function (same library) is still in the
@@ -334,7 +386,7 @@ long loader_function_count(void) {
 	return n;
 }
 
-/* Register the three loader UDFs. Returns AUE_NO_ERROR only if all three were
+/* Register the four loader UDFs. Returns AUE_NO_ERROR only if all of them were
    added; otherwise the first failure (so the caller can refuse to set up a
    dispatcher whose dispatch mechanism is non-functional). */
 AddUDFError LoadUserFunctions(
@@ -343,6 +395,8 @@ AddUDFError LoadUserFunctions(
 	AddUDFError err = AddUDF(env, "LoadDispatch", "l", 2, 2, "s", Loader, "LoadDispatch", NULL);
 	if (err != AUE_NO_ERROR) { return err; }
 	err = AddUDF(env, "UnLoadDispatch", "l", 2, 2, "s", UnLoader, "UnLoadDispatch", NULL);
+	if (err != AUE_NO_ERROR) { return err; }
+	err = AddUDF(env, "CleanupDispatch", "l", 2, 2, "s", Cleanup, "CleanupDispatch", NULL);
 	if (err != AUE_NO_ERROR) { return err; }
 	err = AddUDF(env, "Dispatch", "*", 1, UNBOUNDED, "*", Dispatcher, "Dispatch", NULL);
 	return err;
@@ -417,31 +471,25 @@ static BuildError LoadErrorRules(Environment* env) {
 		"          (error \"Function name already loaded from a different library - function names must be unique across libraries\") "
 		"   )"
 		" )", build_result);
+	/* -30/-31 belong to CLEANUP, not unload: unload never touches the wrapper and
+	   so can never fail this way. Names now match their meaning (they used to be
+	   swapped: -30 was called "not-deletable" though it means the delete was
+	   attempted and failed, and -31 the reverse). Neither re-arms the fact -- a
+	   failed cleanup stays visibly failed rather than silently bouncing. */
 	build_result = build_step(env, ""
-		"(defrule loader-already-defined"
-		"   ?d <- (functions (loaded -5))"
-		"   =>"
-		"   (modify ?d "
-		"          (error \"Function was already defined, not redefining\") "
-		"          (loaded 1) "
-		"   )"
-		" )", build_result);
-	build_result = build_step(env, ""
-		"(defrule unloader-not-deletable"
+		"(defrule cleanup-delete-failed"
 		"   ?d <- (functions (loaded -30))"
 		"   =>"
 		"   (modify ?d "
-		"          (error \"Unable to delete the function\") "
+		"          (error \"Function is deletable but removing it failed\") "
 		"   )"
 		" )", build_result);
 	build_result = build_step(env, ""
-		"(defrule unloader-unable-to-delete"
+		"(defrule cleanup-still-referenced"
 		"   ?d <- (functions (loaded -31))"
 		"   =>"
 		"   (modify ?d "
-		"          (error \"Function is in use, triggererd reload\") "
-		"          (action \"load\") "
-		"          (loaded 0) "
+		"          (error \"Function is still referenced by other constructs (or is executing) - remove the rules/deffunctions that call it, then retry cleanup\") "
 		"   )"
 		" )", build_result);
 	build_result = build_step(env, ""
@@ -522,6 +570,22 @@ BuildError setup_dispatcher(Environment* env) {
 		"   =>"
 		"   (modify ?d "
 		"          (loaded (UnLoadDispatch ?lib ?func)) "
+		"   )"
+		" )", build_result);
+	/* Retire the name in THIS environment by removing its wrapper.
+	   Orthogonal to unload -- cleanup never touches the library or the global
+	   table, and unload never touches the wrapper -- so it is accepted from either
+	   state (loaded 0 or 1) and in either order. That matters because unload is
+	   process-global while cleanup is environment-local: an environment must be
+	   able to retire its own wrapper WITHOUT unloading a library other
+	   environments are still using. Success leaves `loaded 2`, which matches no
+	   rule and is therefore terminal. */
+	build_result = build_step(env, ""
+		"(defrule cleanuplib"
+		"   ?d <- (functions (library ?lib) (function ?func) (action \"cleanup\") (loaded ?l&0|1))"
+		"   =>"
+		"   (modify ?d "
+		"          (loaded (CleanupDispatch ?lib ?func)) "
 		"   )"
 		" )", build_result);
 

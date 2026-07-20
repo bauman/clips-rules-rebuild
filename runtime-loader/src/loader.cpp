@@ -19,6 +19,8 @@ void* free_lib(void* v_hinstLib) {
         HINSTANCE hinstLib = *hinstLib_p;
         bool freed = (FreeLibrary(hinstLib) != 0);   /* FreeLibrary: nonzero == success */
 #else
+
+
         bool freed = (dlclose(v_hinstLib) == 0);     /* dlclose: 0 == success (opposite of FreeLibrary) */
 #endif
         if (freed) {

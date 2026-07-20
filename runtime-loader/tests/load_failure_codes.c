@@ -4,6 +4,7 @@
 #include "clips.h"
 #include "dispatcher.h"
 #include "plugin_names.h"
+#include "run_bounded.h"
 
 /*
  * The two load-failure modes must be distinguishable in the `loaded` slot:
@@ -32,7 +33,8 @@ static long long load_and_get_code(Environment* env, const char* lib, const char
    *ok = 0;
    snprintf(buf, sizeof(buf), "(functions (library \"%s\") (function \"%s\"))", lib, fn);
    AssertString(env, buf);
-   Run(env, -1);
+   /* a load fires loadlib (1), plus its error rule on failure (2) */
+   if (run_bounded(env, 10, 6, "load fact") < 0) { return 0; }   /* *ok stays 0 -> caller fails */
    snprintf(buf, sizeof(buf),
             "(do-for-fact ((?f functions)) (eq ?f:function \"%s\") ?f:loaded)", fn);
    if (Eval(env, buf, &rv) != EE_NO_ERROR) { return 0; }

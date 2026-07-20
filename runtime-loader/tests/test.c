@@ -1,6 +1,7 @@
 
 #include "clips.h"
 #include "dispatcher.h"
+#include "run_bounded.h"
 
 
 int see_if_it_works() {
@@ -38,7 +39,7 @@ int see_if_it_works() {
 		FBDispose(theFB);
 		
 
-		rules_fired = Run(theEnv, -1);
+		rules_fired = run_bounded(theEnv, 10, 6, "load Cube");
 		Save(theEnv, "test-save-state.clp");
 
 		build_result = Build(theEnv, ""
@@ -68,7 +69,7 @@ int see_if_it_works() {
 		FBDispose(theFB);
 
 		SaveFacts(theEnv, "test-save-facts-0.clp", ss);
-		rules_fired = Run(theEnv, -1);
+		rules_fired = run_bounded(theEnv, 10, 6, "dothemath");
 
 
 
@@ -110,7 +111,12 @@ int see_if_it_works() {
 		FMModify(theFM);
 		FMDispose(theFM);
 		SaveFacts(theEnv, "test-save-facts-1.clp", ss);
-		int unloading_in_usetriggers_reload = Run(theEnv, -1);
+		/* Unloading a function that is still in use bounces through several rules:
+		   unloadlib -> unloader-unable-to-delete (which re-arms the fact for load)
+		   -> loadlib -> loader-already-defined. So this one legitimately fires more
+		   than a plain load; the cap is correspondingly larger but still finite. */
+		int unloading_in_usetriggers_reload = run_bounded(theEnv, 12, 8, "unload-in-use triggers reload");
+		if (unloading_in_usetriggers_reload < 0) { return -1; }
 		SaveFacts(theEnv, "test-save-facts-2.clp", ss);
 		//Bsave(theEnv, "dan.bclp");
 		//Bload(theEnv, "dan.bclp");

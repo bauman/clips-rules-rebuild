@@ -4,6 +4,7 @@
 #include "clips.h"
 #include "dispatcher.h"
 #include "plugin_names.h"
+#include "run_bounded.h"
 
 /*
  * End-to-end test of the assembly-backed IsOdd plugin. It exercises the whole
@@ -35,7 +36,7 @@ int main(void)
    if (setup_dispatcher(env) != BE_NO_ERROR) { fprintf(stderr, "setup_dispatcher failed\n"); return 1; }
 
    AssertString(env, "(functions (library \"" ISODD_LIB "\") (function \"IsOdd\"))");
-   Run(env, -1);
+   if (run_bounded(env, 10, 6, "load IsOdd") < 0) { return 1; }
 
    /* parity across positives, zero, and negatives (two's-complement low bit) */
    check(env, "(IsOdd 3)", "TRUE", &failures);

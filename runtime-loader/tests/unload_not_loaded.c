@@ -4,6 +4,7 @@
 #include "clips.h"
 #include "dispatcher.h"
 #include "plugin_names.h"
+#include "run_bounded.h"
 
 /*
  * F8 regression: unloading a function that is not in the global table must yield
@@ -52,7 +53,8 @@ int main(void)
    /* case 1: never loaded -- hand-asserted unload fact */
    AssertString(env, "(functions (library \"no-such-lib\") (function \"Nope\")"
                      " (action \"unload\") (loaded 1))");
-   Run(env, -1);
+   /* the F8 runaway lived here: unbounded, garbage `loaded` span forever */
+   if (run_bounded(env, 10, 6, "unload never-loaded fn") < 0) { return 1; }
    if (fact_loaded(env, "Nope", &ok) != -32 || !ok)
      { fail(&failures, "never-loaded unload did not end with (loaded -32)"); }
    if (Eval(env, "(do-for-fact ((?f functions)) (eq ?f:function \"Nope\") ?f:error)", &rv) != EE_NO_ERROR
@@ -62,13 +64,13 @@ int main(void)
 
    /* case 2: load, unload (removes the global entry), then unload AGAIN */
    AssertString(env, "(functions (library \"" CUBE_LIB "\") (function \"Cube\"))");
-   Run(env, -1);
+   if (run_bounded(env, 10, 6, "load Cube") < 0) { return 1; }
    if (fact_loaded(env, "Cube", &ok) != 1 || !ok)
      { fail(&failures, "Cube did not load (loaded != 1)"); }
 
    Eval(env, "(do-for-fact ((?f functions)) (eq ?f:function \"Cube\")"
              " (modify ?f (action \"unload\")))", NULL);
-   Run(env, -1);
+   if (run_bounded(env, 10, 6, "first unload Cube") < 0) { return 1; }
    if (fact_loaded(env, "Cube", &ok) != 0 || !ok)
      { fail(&failures, "first Cube unload did not succeed (loaded != 0)"); }
    if (loader_function_count() != 0)
@@ -76,7 +78,7 @@ int main(void)
 
    Eval(env, "(do-for-fact ((?f functions)) (eq ?f:function \"Cube\")"
              " (modify ?f (action \"unload\") (loaded 1)))", NULL);
-   Run(env, -1);
+   if (run_bounded(env, 10, 6, "second unload Cube (already gone)") < 0) { return 1; }
    if (fact_loaded(env, "Cube", &ok) != -32 || !ok)
      { fail(&failures, "second Cube unload did not end with (loaded -32)"); }
 

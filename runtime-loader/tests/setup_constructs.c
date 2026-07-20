@@ -27,9 +27,9 @@ static const char* expected_rules[] = {
    "loader-load-failed",
    "loader-symbol-not-found",
    "loader-name-collision",
-   "loader-already-defined",
-   "unloader-not-deletable",
-   "unloader-unable-to-delete",
+   "cleanuplib",
+   "cleanup-delete-failed",
+   "cleanup-still-referenced",
    "unloader-not-loaded",
 };
 

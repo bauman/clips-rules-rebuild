@@ -370,8 +370,15 @@ else()
     
     add_library(clips SHARED ${SOURCE_FILES})
     add_library(clips-static ${SOURCE_FILES})
-    set_target_properties(clips PROPERTIES LINK_FLAGS_RELEASE -s)
-    set_target_properties(clips-static PROPERTIES LINK_FLAGS_RELEASE -s)
+    # `-s` (strip symbols at link) is obsolete on Apple's linker -- it emits
+    # "ld: warning: -s is obsolete" and ignores the flag. Keep it for GNU ld (ELF),
+    # skip it on APPLE. (The static-cli branch below still passes it, but that path
+    # is unreachable on macOS: -static has no static libc there, so mac is
+    # dynamic-only.)
+    if (NOT APPLE)
+        set_target_properties(clips PROPERTIES LINK_FLAGS_RELEASE -s)
+        set_target_properties(clips-static PROPERTIES LINK_FLAGS_RELEASE -s)
+    endif()
     target_link_libraries(clips m)
     target_link_libraries(clips-static m)
     add_executable(clipscli main.c)
@@ -381,7 +388,9 @@ else()
         set(CMAKE_EXE_LINKER_FLAGS "-static -s")
         target_link_libraries(clipscli clips-static )
     else()
-        set(CMAKE_EXE_LINKER_FLAGS "-s")
+        if (NOT APPLE)   # -s is obsolete on Apple's linker (see above)
+            set(CMAKE_EXE_LINKER_FLAGS "-s")
+        endif()
         target_link_libraries(clipscli clips )
     endif()
     install(FILES ${HEADER_FILES} DESTINATION include/clips-640)

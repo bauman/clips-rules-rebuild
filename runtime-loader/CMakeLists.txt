@@ -65,6 +65,7 @@ endif ()
 # down into subdirectories, so the plugins read this one.
 set(RUNTIME_LOADER_PLUGIN_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}")
 add_subdirectory(plugins/Cube)
+add_subdirectory(plugins/CubeForTesting)
 add_subdirectory(plugins/IsOdd)
 
 # --- standalone CLI application ---
@@ -179,6 +180,24 @@ target_link_libraries(test_load_failure_codes dispatcher clips)
 add_test(test_load_failure_codes test_load_failure_codes)
 add_dependencies(test_load_failure_codes cube)
 
+# The two-tier lifecycle: unload is a non-destructive BOUNCE (library released,
+# wrapper kept, succeeds even while defrules reference the function, reload
+# revives the same wrapper); cleanup is the explicit teardown that retires the
+# name, and is refused until the caller removes the referencing constructs.
+add_executable(test_bounce_cleanup tests/bounce_cleanup.c)
+target_link_libraries(test_bounce_cleanup dispatcher clips)
+add_test(test_bounce_cleanup test_bounce_cleanup)
+add_dependencies(test_bounce_cleanup cube)
+
+# The payoff case: physically overwrite a plugin's library file between an unload
+# and a load and prove the running rule base picks up the NEW code without any
+# rule being rebuilt. Needs cube (v1) and cube_for_testing (a different implementation of
+# the same exported name) to make the swap observable.
+add_executable(test_hot_update tests/hot_update.c)
+target_link_libraries(test_hot_update dispatcher clips)
+add_test(test_hot_update test_hot_update)
+add_dependencies(test_hot_update cube cube_for_testing)
+
 # End-to-end test of the assembly-backed IsOdd plugin -- only where that plugin has
 # an assembly core for this architecture (see plugins/IsOdd/CMakeLists.txt).
 if (TARGET isodd)
@@ -224,6 +243,13 @@ if (WIN32)
 	add_custom_command(TARGET test_load_failure_codes POST_BUILD
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips> $<TARGET_FILE_DIR:test_load_failure_codes>
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:cube>  $<TARGET_FILE_DIR:test_load_failure_codes>)
+	add_custom_command(TARGET test_bounce_cleanup POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips> $<TARGET_FILE_DIR:test_bounce_cleanup>
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:cube>  $<TARGET_FILE_DIR:test_bounce_cleanup>)
+	add_custom_command(TARGET test_hot_update POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips>   $<TARGET_FILE_DIR:test_hot_update>
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:cube>    $<TARGET_FILE_DIR:test_hot_update>
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:cube_for_testing> $<TARGET_FILE_DIR:test_hot_update>)
 	# test_isodd exists only where the IsOdd plugin has an assembly core for this
 	# architecture; it LoadLibrary's isodd.dll at runtime, so copy that too.
 	if (TARGET isodd)

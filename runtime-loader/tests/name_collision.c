@@ -4,6 +4,7 @@
 #include "clips.h"
 #include "dispatcher.h"
 #include "plugin_names.h"
+#include "run_bounded.h"
 
 /*
  * F4 regression: function names must be unique across ALL libraries. A name
@@ -55,12 +56,13 @@ int main(void)
    if (setup_dispatcher(env) != BE_NO_ERROR) { fprintf(stderr, "setup_dispatcher failed\n"); return 1; }
 
    AssertString(env, "(functions (library \"" CUBE_LIB "\") (function \"Cube\"))");
-   Run(env, -1);
+   if (run_bounded(env, 10, 6, "load Cube from cube") < 0) { return 1; }
    if (eval_int(env, "(Cube 3)") != 27) { fprintf(stderr, "FAIL: Cube(3) != 27\n"); failures++; }
 
    /* same name from a DIFFERENT library -> must be refused */
    AssertString(env, "(functions (library \"" CUBE2_LIB "\") (function \"Cube\"))");
-   Run(env, -1);
+   /* refused: loadlib fires, then the -4 name-collision error rule */
+   if (run_bounded(env, 10, 6, "load Cube from cube2 (collision)") < 0) { return 1; }
 
    collision_loaded = loaded_for_library(env, CUBE2_LIB, &found);
    if (!found)                     { fprintf(stderr, "FAIL: collision fact not found\n"); failures++; }
