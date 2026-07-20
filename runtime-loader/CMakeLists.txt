@@ -195,8 +195,27 @@ add_dependencies(test_bounce_cleanup cube)
 # the same exported name) to make the swap observable.
 add_executable(test_hot_update tests/hot_update.c)
 target_link_libraries(test_hot_update dispatcher clips)
-add_test(test_hot_update test_hot_update)
+# Unlike every other test, this one manipulates the plugin FILES (fopen/rename) as
+# well as loading them. Those two resolve differently: LoadLibrary/dlopen find a
+# plugin next to the executable, but fopen resolves against the CURRENT WORKING
+# DIRECTORY. ctest defaults that to the binary dir of wherever add_test was called
+# -- which on multi-config generators (MSBuild) is NOT where the binaries are:
+# they go in a per-config subdirectory (runtime-loader/Release/). So pin the
+# working directory to the executable's own directory: the same place on
+# single-config generators, the per-config dir on multi-config ones.
+#
+# NOTE the add_test(NAME ... COMMAND ...) signature is required here -- its
+# WORKING_DIRECTORY evaluates generator expressions, whereas the WORKING_DIRECTORY
+# set via set_tests_properties() does NOT (it would be written to
+# CTestTestfile.cmake literally).
+add_test(NAME test_hot_update
+	COMMAND test_hot_update
+	WORKING_DIRECTORY "$<TARGET_FILE_DIR:test_hot_update>")
 add_dependencies(test_hot_update cube cube_for_testing)
+if (MSVC)
+	# fopen/rename are the point of this test; MSVC's _s variants are not portable.
+	target_compile_definitions(test_hot_update PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif ()
 
 # End-to-end test of the assembly-backed IsOdd plugin -- only where that plugin has
 # an assembly core for this architecture (see plugins/IsOdd/CMakeLists.txt).
