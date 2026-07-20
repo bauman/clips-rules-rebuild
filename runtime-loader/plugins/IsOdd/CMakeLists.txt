@@ -53,6 +53,12 @@ if (ISODD_ASM_SRC)
 	if (WIN32)
 		set_target_properties(isodd PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 	endif ()
+	# Build into the runtime-loader binary dir, not this subdirectory: the test
+	# loads the plugin by bare relative filename from its working directory (which
+	# is that dir). See the add_subdirectory() comment in ../../CMakeLists.txt.
+	set_target_properties(isodd PROPERTIES
+		LIBRARY_OUTPUT_DIRECTORY "${RUNTIME_LOADER_PLUGIN_OUTPUT_DIR}"
+		RUNTIME_OUTPUT_DIRECTORY "${RUNTIME_LOADER_PLUGIN_OUTPUT_DIR}")
 else ()
 	message(STATUS "runtime-loader: no IsOdd assembly core for '${CMAKE_SYSTEM_PROCESSOR}' -- skipping the isodd plugin and its test")
 endif ()

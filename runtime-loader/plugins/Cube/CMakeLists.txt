@@ -21,3 +21,10 @@ if (WIN32)
 	set_target_properties(cube  PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 	set_target_properties(cube2 PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 endif ()
+
+# Build into the runtime-loader binary dir, not this subdirectory: the tests load
+# plugins by bare relative filename from their working directory (which is that
+# dir). See the comment at the add_subdirectory() call in ../../CMakeLists.txt.
+set_target_properties(cube cube2 PROPERTIES
+	LIBRARY_OUTPUT_DIRECTORY "${RUNTIME_LOADER_PLUGIN_OUTPUT_DIR}"
+	RUNTIME_OUTPUT_DIRECTORY "${RUNTIME_LOADER_PLUGIN_OUTPUT_DIR}")

@@ -54,6 +54,16 @@ endif ()
 # Because a plugin may decline to build, detect it afterwards with `if (TARGET x)`:
 # targets are global across directories, whereas variables set in a subdirectory do
 # not propagate back to this scope.
+#
+# Plugins must BUILD INTO THIS DIRECTORY, not their own. The tests load them at
+# runtime by bare relative filename (tests/plugin_names.h -> "./libcube.so"), which
+# resolves against the test's working directory -- which ctest sets to the binary
+# dir of wherever add_test() was called, i.e. here. Letting each plugin build into
+# its own subdirectory silently breaks every plugin-loading test on POSIX. (Windows
+# masks this: the DLLs are copied next to each test exe below, via generator
+# expressions that resolve the target wherever it lives.) Variables DO propagate
+# down into subdirectories, so the plugins read this one.
+set(RUNTIME_LOADER_PLUGIN_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}")
 add_subdirectory(plugins/Cube)
 add_subdirectory(plugins/IsOdd)
 
