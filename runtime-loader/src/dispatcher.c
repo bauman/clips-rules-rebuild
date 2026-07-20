@@ -124,8 +124,17 @@ int PerformLoading(const char* library, const char* function) {
 		return -4;
 	}
 	if (func_exists != NULL) {
-		result = 1;
+		unlock_read(ensure_lock());
+		return 1;
 	}
+	/* Function not resolved -- split the failure so the caller learns WHICH stage
+	   failed (both were previously a single -3). If the library made it into the
+	   table, it loaded fine and the symbol just wasn't found in it (-6: likely a
+	   wrong/misspelled function name); otherwise the library itself failed to load
+	   (-3: likely a wrong path or a missing dependency). Checked under the same read
+	   lock so the library-state read is consistent with the function miss above. */
+	HASH_FIND_STR(libraries, library, lib_exists);
+	result = (lib_exists != NULL) ? -6 : -3;
 	unlock_read(ensure_lock());
 	return result;
 }
@@ -205,11 +214,11 @@ void Loader(
 	if (loaded > 0) {
 		DefineFuncIfRequired(env, udfc, out, (const char*)function.lexemeValue->contents);
 	}
-	else if (loaded == -4) {
-		out->integerValue = CreateInteger(env, -4);   /* name collision across libraries */
-	}
 	else {
-		out->integerValue = CreateInteger(env, -3);
+		/* Pass the diagnostic failure code straight through -- each has its own
+		   error rule: -3 library failed to load, -4 name collision across
+		   libraries, -6 library loaded but function/symbol not found. */
+		out->integerValue = CreateInteger(env, loaded);
 	}
 }
 
@@ -389,7 +398,15 @@ static BuildError LoadErrorRules(Environment* env) {
 		"   ?d <- (functions (loaded -3))"
 		"   =>"
 		"   (modify ?d "
-		"          (error \"Unable to load the requested library or function\") "
+		"          (error \"Unable to load the requested library - check the library path/filename and that its dependencies resolve\") "
+		"   )"
+		" )", build_result);
+	build_result = build_step(env, ""
+		"(defrule loader-symbol-not-found"
+		"   ?d <- (functions (loaded -6))"
+		"   =>"
+		"   (modify ?d "
+		"          (error \"Library loaded but the function was not found in it - check the exported function/symbol name\") "
 		"   )"
 		" )", build_result);
 	build_result = build_step(env, ""

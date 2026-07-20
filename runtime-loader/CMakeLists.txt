@@ -41,25 +41,49 @@ else ()
 	target_link_libraries(dispatcher-static dl pthread)
 endif ()
 
-# --- example plugin ---
-add_library(cube SHARED plugins/Cube.c)
-target_link_libraries(cube clips)
-if (WIN32)
-	set_target_properties(cube PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
-endif ()
-
-# A second shared library built from the same plugin source, so it exports the
-# same symbols (Cube, Square) from a different file. Used by the name-collision
-# test to exercise two genuine libraries claiming the same function name.
-add_library(cube2 SHARED plugins/Cube.c)
-target_link_libraries(cube2 clips)
-if (WIN32)
-	set_target_properties(cube2 PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
-endif ()
+# --- example plugins ---
+# Each plugin owns its own build rules, so a plugin directory is a self-contained,
+# copyable template (sources + CMakeLists). This file only decides WHICH plugins
+# are included; how each one is built lives with it.
+#
+#   Cube  -- plain C, exports Cube + Square; also builds cube2 from the same source
+#            so two distinct libraries export the same names (name-collision tests).
+#   IsOdd -- assembly-backed; picks a per-(arch, toolchain) core and builds nothing
+#            on architectures it has no core for.
+#
+# Because a plugin may decline to build, detect it afterwards with `if (TARGET x)`:
+# targets are global across directories, whereas variables set in a subdirectory do
+# not propagate back to this scope.
+add_subdirectory(plugins/Cube)
+add_subdirectory(plugins/IsOdd)
 
 # --- standalone CLI application ---
 add_executable(runtime-clips app/main.c)
 target_link_libraries(runtime-clips dispatcher clips)
+
+# --- pre-1.0 packaging: shared-library version + install-tree rpath ---
+# Version the shared dispatcher so it carries a SONAME (libdispatcher.so.1 on ELF)
+# / a compatibility+current version (on Mach-O), the basis for ABI-tracked upgrades.
+# VERSION is the release version; SOVERSION is the ABI version consumers link
+# against -- bump SOVERSION only on an ABI break. Set to the intended first stable
+# release (1.0); adjust both if the project versions the pre-1.0 line as 0.x.
+set_target_properties(dispatcher PROPERTIES VERSION 1.0.0 SOVERSION 1)
+
+# Make the INSTALLED binaries resolve their sibling shared libs without the caller
+# exporting DYLD_LIBRARY_PATH / LD_LIBRARY_PATH. The install-names are already
+# @rpath/* (CMake's default), but CMake strips the build-tree rpaths on install and
+# adds nothing -- so an installed runtime-clips currently finds neither
+# libdispatcher nor libclips. Give the consumers a loader-relative rpath to the
+# install libdir (runtime-clips is in bin/, dispatcher + libclips in lib/); relative
+# (@loader_path / $ORIGIN) keeps the install relocatable across prefixes. Windows
+# has no rpath (DLLs are copied beside the exe / found via PATH), so skip it there.
+if (APPLE)
+	set_target_properties(runtime-clips PROPERTIES INSTALL_RPATH "@loader_path/../lib")
+	set_target_properties(dispatcher    PROPERTIES INSTALL_RPATH "@loader_path")
+elseif (NOT WIN32)
+	set_target_properties(runtime-clips PROPERTIES INSTALL_RPATH "$ORIGIN/../lib")
+	set_target_properties(dispatcher    PROPERTIES INSTALL_RPATH "$ORIGIN")
+endif ()
 
 # --- regression test ---
 add_executable(testdispatch tests/test.c)
@@ -137,6 +161,23 @@ target_link_libraries(test_concurrent_name_collision dispatcher clips Threads::T
 add_test(test_concurrent_name_collision test_concurrent_name_collision)
 add_dependencies(test_concurrent_name_collision cube cube2)
 
+# load-failure diagnosis: a bad library path yields -3, a real library missing the
+# requested symbol yields -6 (previously both were an ambiguous -3). Needs cube for
+# the real-library / missing-symbol and positive-control cases.
+add_executable(test_load_failure_codes tests/load_failure_codes.c)
+target_link_libraries(test_load_failure_codes dispatcher clips)
+add_test(test_load_failure_codes test_load_failure_codes)
+add_dependencies(test_load_failure_codes cube)
+
+# End-to-end test of the assembly-backed IsOdd plugin -- only where that plugin has
+# an assembly core for this architecture (see plugins/IsOdd/CMakeLists.txt).
+if (TARGET isodd)
+	add_executable(test_isodd tests/isodd.c)
+	target_link_libraries(test_isodd dispatcher clips)
+	add_test(test_isodd test_isodd)
+	add_dependencies(test_isodd isodd)
+endif ()
+
 if (WIN32)
 	# no rpath on windows: copy clips.dll next to each exe, and the plugin DLLs
 	# next to the test exes that LoadLibrary them at runtime, so they resolve.
@@ -170,6 +211,16 @@ if (WIN32)
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips> $<TARGET_FILE_DIR:test_concurrent_name_collision>
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:cube>  $<TARGET_FILE_DIR:test_concurrent_name_collision>
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:cube2> $<TARGET_FILE_DIR:test_concurrent_name_collision>)
+	add_custom_command(TARGET test_load_failure_codes POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips> $<TARGET_FILE_DIR:test_load_failure_codes>
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:cube>  $<TARGET_FILE_DIR:test_load_failure_codes>)
+	# test_isodd exists only where the IsOdd plugin has an assembly core for this
+	# architecture; it LoadLibrary's isodd.dll at runtime, so copy that too.
+	if (TARGET isodd)
+		add_custom_command(TARGET test_isodd POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips> $<TARGET_FILE_DIR:test_isodd>
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:isodd> $<TARGET_FILE_DIR:test_isodd>)
+	endif ()
 	add_custom_command(TARGET runtime-clips POST_BUILD
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips> $<TARGET_FILE_DIR:runtime-clips>)
 endif ()

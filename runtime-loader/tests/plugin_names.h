@@ -17,4 +17,14 @@
 #  define CUBE2_LIB "./libcube2.so"
 #endif
 
+/* The assembly-backed IsOdd plugin is aarch64/arm64-only, but that includes
+   Windows/ARM64 (armasm64 core), so it needs a name on every platform. */
+#ifdef WIN32
+#  define ISODD_LIB "isodd.dll"
+#elif defined(__APPLE__)
+#  define ISODD_LIB "./libisodd.dylib"
+#else
+#  define ISODD_LIB "./libisodd.so"
+#endif
+
 #endif
