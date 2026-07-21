@@ -130,3 +130,17 @@ dmypy.json
 # Pyre type checker
 .pyre/
 /core-6.40/CMakeLists - Copy.txt
+
+# macOS Finder metadata — created anywhere in the tree, never wanted
+.DS_Store
+
+# JetBrains / CLion project settings (this is a CLion project; the IDE also
+# writes its own .idea/.gitignore, but ignore the whole directory here so it
+# never shows up as untracked)
+.idea/
+
+# Claude Code local settings
+.claude/
+
+# Let each user manage claude in the way they want
+CLAUDE.md

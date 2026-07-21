@@ -107,12 +107,35 @@ int PerformLoading(const char* library, const char* function) {
 			}
 		}
 	}
+	/* Final success check -- re-verify libname, not just presence. If we lost an
+	   F4 race (a DIFFERENT library registered this name between the up-front check
+	   and here), the entry belongs to that other library; reporting success would
+	   silently bind this caller into it. Refuse with -4, the same verdict as the
+	   up-front check -- this is what shrinks the race window from "may misroute" to
+	   "refused". Single-threaded this branch is unreachable (the up-front check
+	   fires first); it is the concurrent-load guard. A race loser may leave its own
+	   library loaded-but-unreferenced until teardown_dispatcher() -- a bounded,
+	   expert-path cost, not a correctness problem. The window is not fully closed
+	   (dispatcher.h documents the residual best-effort nature). */
 	lock_read(ensure_lock());
 	HASH_FIND_STR(functions, function, func_exists);
-	unlock_read(ensure_lock());
-	if (func_exists) {
-		result = 1;
+	if (func_exists != NULL && strcmp(func_exists->libname, library) != 0) {
+		unlock_read(ensure_lock());
+		return -4;
 	}
+	if (func_exists != NULL) {
+		unlock_read(ensure_lock());
+		return 1;
+	}
+	/* Function not resolved -- split the failure so the caller learns WHICH stage
+	   failed (both were previously a single -3). If the library made it into the
+	   table, it loaded fine and the symbol just wasn't found in it (-6: likely a
+	   wrong/misspelled function name); otherwise the library itself failed to load
+	   (-3: likely a wrong path or a missing dependency). Checked under the same read
+	   lock so the library-state read is consistent with the function miss above. */
+	HASH_FIND_STR(libraries, library, lib_exists);
+	result = (lib_exists != NULL) ? -6 : -3;
+	unlock_read(ensure_lock());
 	return result;
 }
 
@@ -150,18 +173,77 @@ void Dispatcher(
 	}
 }
 
+/* Upper bound on a declared arity. Generous for a dispatched call, and it keeps
+   the generated deffunction text comfortably inside `builder` below. */
+#define LOADER_MAX_ARITY 64
+
+/*
+ * Build this environment's wrapper deffunction for `function`.
+ *
+ * TWO SHAPES, chosen by the `arity` slot on the load fact:
+ *
+ *   arity < 0 (the default, "unspecified") -- a wildcard wrapper:
+ *       (deffunction NAME ($?args) (Dispatch NAME (expand$ ?args)))
+ *     The loader stays completely signature-agnostic: any exported symbol can be
+ *     wrapped without declaring anything. The cost is that a $?args parameter
+ *     FLATTENS multifields, so the plugin only ever sees scalars, and CLIPS
+ *     accepts any call -- ALL arity/type validation lands in the plugin, which
+ *     reports refusal as FAIL.
+ *
+ *   arity N >= 0 -- a fixed-parameter wrapper:
+ *       (deffunction NAME (?a1 ... ?aN) (Dispatch NAME ?a1 ... ?aN))
+ *     Each parameter preserves a multifield, so a plugin can take structured
+ *     arguments (CLIPS multifields cannot nest, so separate parameters are the
+ *     ONLY way to pass more than one). In exchange CLIPS now enforces the arity
+ *     itself and rejects a wrong-sized call before the plugin runs.
+ *
+ * That trade is deliberate and per-plugin: declaring a shape moves *signature*
+ * errors to CLIPS while leaving *environment* refusals (e.g. "this host has no
+ * such coprocessor") with the plugin, where they belong. See dispatcher.h.
+ */
 void DefineFuncIfRequired(
-	Environment* env, 
+	Environment* env,
 	UDFContext* udfc,
 	UDFValue* out,
-	const char* function) {
+	const char* function,
+	long long arity) {
 	BuildError build_result;
-	char builder[1024] = { 0 };
+	char builder[2048] = { 0 };
+	char params[768] = { 0 };
+	char passed[768] = { 0 };
 
 	Deffunction* func =  FindDeffunction(env, function);
 	if (!func) {
-		int written = snprintf((char *)&builder, 1024, "(deffunction %s ($?args) 	(Dispatch %s (expand$ ?args)))", function, function);
-		if (written > 0 && written < 1024) {
+		int written;
+
+		if (arity > LOADER_MAX_ARITY) {
+			out->integerValue = CreateInteger(env, -7);
+			return;
+		}
+
+		if (arity < 0) {
+			written = snprintf(builder, sizeof(builder),
+				"(deffunction %s ($?args) 	(Dispatch %s (expand$ ?args)))", function, function);
+		} else {
+			size_t plen = 0, alen = 0;
+			long long i;
+			for (i = 0; i < arity; i++) {
+				int pn = snprintf(params + plen, sizeof(params) - plen, "%s?a%lld",
+				                  (i == 0) ? "" : " ", i + 1);
+				int an = snprintf(passed + alen, sizeof(passed) - alen, " ?a%lld", i + 1);
+				if (pn <= 0 || (size_t)pn >= sizeof(params) - plen ||
+				    an <= 0 || (size_t)an >= sizeof(passed) - alen) {
+					out->integerValue = CreateInteger(env, -2);
+					return;
+				}
+				plen += (size_t)pn;
+				alen += (size_t)an;
+			}
+			written = snprintf(builder, sizeof(builder),
+				"(deffunction %s (%s) 	(Dispatch %s%s))", function, params, function, passed);
+		}
+
+		if (written > 0 && (size_t)written < sizeof(builder)) {
 			build_result = Build(env, builder);
 			if (build_result) {
 				out->integerValue = CreateInteger(env, -1);
@@ -173,7 +255,11 @@ void DefineFuncIfRequired(
 		}
 	}
 	else {
-		out->integerValue = CreateInteger(env, -5);
+		/* The wrapper already exists and is exactly what we would build -- it
+		   dispatches BY NAME and holds no reference to any library. That is the
+		   normal state on a RELOAD (unload deliberately leaves the wrapper in
+		   place so the bounce works), so this is success, not an error. */
+		out->integerValue = CreateInteger(env, 1);
 	}
 }
 
@@ -181,25 +267,44 @@ void Loader(
 	Environment* env,
 	UDFContext* udfc,
 	UDFValue* out) {
-	UDFValue library, function;
-	if (!UDFNthArgument(udfc, 1, STRING_BIT, &library) || !UDFNthArgument(udfc, 2, STRING_BIT, &function))
+	UDFValue library, function, arity;
+	if (!UDFNthArgument(udfc, 1, STRING_BIT, &library) ||
+	    !UDFNthArgument(udfc, 2, STRING_BIT, &function) ||
+	    !UDFNthArgument(udfc, 3, INTEGER_BIT, &arity))
 	{
 		out->integerValue = CreateInteger(env, -200);
 		return;   /* args not populated -- must not fall through and deref them */
 	}
 	int loaded = PerformLoading(library.lexemeValue->contents, function.lexemeValue->contents);
 	if (loaded > 0) {
-		DefineFuncIfRequired(env, udfc, out, (const char*)function.lexemeValue->contents);
-	}
-	else if (loaded == -4) {
-		out->integerValue = CreateInteger(env, -4);   /* name collision across libraries */
+		/* arity < 0 means "unspecified" -> the signature-agnostic wildcard wrapper */
+		DefineFuncIfRequired(env, udfc, out, (const char*)function.lexemeValue->contents,
+		                     arity.integerValue->contents);
 	}
 	else {
-		out->integerValue = CreateInteger(env, -3);
+		/* Pass the diagnostic failure code straight through -- each has its own
+		   error rule: -3 library failed to load, -4 name collision across
+		   libraries, -6 library loaded but function/symbol not found. */
+		out->integerValue = CreateInteger(env, loaded);
 	}
 }
 
 
+/*
+ * Remove this environment's deffunction wrapper for `function`. This is the
+ * CLEANUP path only -- unloading deliberately does NOT do this (see UnLoader).
+ *
+ * The wrapper is what makes the name exist to CLIPS, so removing it is what
+ * truly retires the name: afterwards a call is an unknown-function error rather
+ * than a silent FALSE from a Dispatch miss. That distinction matters for any
+ * plugin whose legitimate result set includes FALSE (the IsOdd example returns
+ * TRUE/FALSE/FAIL -- an unloaded FALSE would be indistinguishable from "even").
+ *
+ * It can only succeed when nothing references the wrapper: CLIPS increments a
+ * deffunction's `busy` count for every construct whose body installs a call to
+ * it, so a defrule using the function blocks removal (-31). Tearing those
+ * constructs down first is the caller's job -- see dispatcher.h.
+ */
 bool UnDefineFuncIfRequired(
 	Environment* env,
 	UDFContext* udfc,
@@ -207,19 +312,82 @@ bool UnDefineFuncIfRequired(
 	const char* function) {
 	bool success = false;
 	Deffunction* func = FindDeffunction(env, function);
+	if (!func) {
+		/* No wrapper bound in THIS environment (never loaded here, or already
+		   cleaned up). Nothing to remove -- vacuous success. DeffunctionIsDeletable
+		   dereferences its argument, so this must be checked (F7). */
+		out->integerValue = CreateInteger(env, 2);
+		return true;
+	}
 	bool deletable = DeffunctionIsDeletable(func);
 	if (deletable) {
 		bool deleted = Undeffunction(func, env);
 		if (deleted) {
 			success = true;
-			out->integerValue = CreateInteger(env, 0);
+			out->integerValue = CreateInteger(env, 2);   /* fully retired */
 		} else {
-			out->integerValue = CreateInteger(env, -30);
+			out->integerValue = CreateInteger(env, -30); /* deletable, but delete failed */
 		}
 	} else {
-		out->integerValue = CreateInteger(env, -31);
+		out->integerValue = CreateInteger(env, -31);     /* still referenced / executing */
 	}
 	return success;
+}
+
+
+/*
+ * CleanupDispatch -- retire the function name in THIS environment by removing its
+ * wrapper. Purely the CLIPS-side teardown: it never touches the library or the
+ * global table, so it is independent of unload and may be run before it, after
+ * it, or without it at all. Notably cleanup is environment-LOCAL while unload is
+ * process-GLOBAL, so an environment can retire its own wrapper while other
+ * environments keep using the still-loaded library.
+ */
+void Cleanup(
+	Environment* env,
+	UDFContext* udfc,
+	UDFValue* out) {
+	UDFValue library, function;
+	if (!UDFNthArgument(udfc, 1, STRING_BIT, &library) || !UDFNthArgument(udfc, 2, STRING_BIT, &function))
+	{
+		out->integerValue = CreateInteger(env, -200);
+		return;
+	}
+	UnDefineFuncIfRequired(env, udfc, out, (const char*)function.lexemeValue->contents);
+}
+
+/*
+ * DispatchLibraryOf -- read-only introspection: which library path currently owns
+ * a given function name? Returns the path as a string, or FALSE if that name is
+ * not loaded.
+ *
+ * Exists so the name-collision (-4) error rule can name the CONFLICTING path
+ * instead of leaving the user to guess. That matters because libraries are
+ * identified by the literal path string: the same file reached by two spellings
+ * ("./lib.so" and "/abs/lib.so") counts as two libraries, and without this the
+ * message reads as though a genuinely different library is involved.
+ */
+void LibraryOf(
+	Environment* env,
+	UDFContext* udfc,
+	UDFValue* out) {
+	UDFValue function;
+	struct function_table* func_exists = NULL;
+
+	if (!UDFNthArgument(udfc, 1, STRING_BIT | SYMBOL_BIT, &function)) {
+		out->lexemeValue = CreateBoolean(env, false);
+		return;
+	}
+	/* Build the CLIPS string while still holding the read lock: libname belongs to
+	   the table entry, which an unload could free once we let go. */
+	lock_read(ensure_lock());
+	HASH_FIND_STR(functions, function.lexemeValue->contents, func_exists);
+	if (func_exists) {
+		out->lexemeValue = CreateString(env, func_exists->libname);
+	} else {
+		out->lexemeValue = CreateBoolean(env, false);
+	}
+	unlock_read(ensure_lock());
 }
 
 void UnLoader(
@@ -239,41 +407,62 @@ void UnLoader(
 	HASH_FIND_STR(functions, function.lexemeValue->contents, func_exists);
 	if (func_exists) {
 		HASH_FIND_STR(libraries, func_exists->libname, lib_exists);
-		if (lib_exists) {
-			struct function_table* other = NULL;
-			struct function_table* other_tmp = NULL;
-			bool library_still_referenced = false;
+	}
+	if (!func_exists || !lib_exists) {
+		/* Not in the global table: never loaded, or already unloaded
+		   process-globally by another environment (F2). Unlike the -200 path this
+		   IS reachable -- the unloadlib rule fires on any hand-asserted
+		   (loaded 1) fact and writes `out` into the fact's `loaded` slot -- so
+		   `out` must be a defined value, not left unset as garbage (F8). */
+		out->integerValue = CreateInteger(env, -32);
+	} else {
+		struct function_table* other = NULL;
+		struct function_table* other_tmp = NULL;
+		bool library_still_referenced = false;
 
-			/* Undefine the per-environment deffunction (operates on env, not the
-			   tables), then remove the function being unloaded from the global
-			   table. */
-			UnDefineFuncIfRequired(env, udfc, out, (const char*)function.lexemeValue->contents);
-			HASH_DEL(functions, func_exists);
+		/* Release the LIBRARY only -- deliberately do NOT touch this environment's
+		   deffunction wrapper.
 
-			/* Only unload the library once NO remaining function references it.
-			   Unloading it while a sibling function (same library) is still in the
-			   table would leave that sibling's ->ref dangling into unmapped code
-			   -- a segfault on its next Dispatch (F1). func_exists is out of the
-			   hash now but still allocated, so its libname is valid to compare. */
-			HASH_ITER(hh, functions, other, other_tmp) {
-				if (strcmp(other->libname, func_exists->libname) == 0) {
-					library_still_referenced = true;
-					break;
-				}
+		   The wrapper's body is `(Dispatch <name> (expand$ ?args))`: it references
+		   the permanent Dispatch UDF and a name string, never the library. So
+		   removing the global table entry and closing the library fully releases
+		   it, and the surviving wrapper is inert -- Dispatch misses the table and
+		   fails safe to FALSE (F2; test_cross_env_unload already exercises exactly
+		   this state across environments).
+
+		   Keeping it is what makes unload a BOUNCE: rules that call the function
+		   keep compiling and binding, so the library can be unloaded, replaced on
+		   disk, and reloaded with no rule teardown at all. Deleting the wrapper
+		   here is what used to make unload fail (-31) whenever any rule referenced
+		   the function -- blocking the very update cycle unload exists for.
+
+		   Retiring the NAME is a separate, explicit step: see Cleanup(). */
+		HASH_DEL(functions, func_exists);
+		out->integerValue = CreateInteger(env, 0);   /* unloaded */
+
+		/* Only unload the library once NO remaining function references it.
+		   Unloading it while a sibling function (same library) is still in the
+		   table would leave that sibling's ->ref dangling into unmapped code
+		   -- a segfault on its next Dispatch (F1). func_exists is out of the
+		   hash now but still allocated, so its libname is valid to compare. */
+		HASH_ITER(hh, functions, other, other_tmp) {
+			if (strcmp(other->libname, func_exists->libname) == 0) {
+				library_still_referenced = true;
+				break;
 			}
-			if (!library_still_referenced) {
-				lib_exists->ref = free_lib(lib_exists->ref);
-				if (!lib_exists->ref) {
-					HASH_DEL(libraries, lib_exists);
-					free(lib_exists->libname);
-					free(lib_exists);
-				}
-			}
-
-			free(func_exists->libname);
-			free(func_exists->function);
-			free(func_exists);
 		}
+		if (!library_still_referenced) {
+			lib_exists->ref = free_lib(lib_exists->ref);
+			if (!lib_exists->ref) {
+				HASH_DEL(libraries, lib_exists);
+				free(lib_exists->libname);
+				free(lib_exists);
+			}
+		}
+
+		free(func_exists->libname);
+		free(func_exists->function);
+		free(func_exists);
 	}
 	unlock_write(ensure_lock());
 }
@@ -294,92 +483,139 @@ long loader_function_count(void) {
 	return n;
 }
 
-/* Register the three loader UDFs. Returns AUE_NO_ERROR only if all three were
+/* Register the five loader UDFs. Returns AUE_NO_ERROR only if all of them were
    added; otherwise the first failure (so the caller can refuse to set up a
    dispatcher whose dispatch mechanism is non-functional). */
 AddUDFError LoadUserFunctions(
 	Environment* env)
 {
-	AddUDFError err = AddUDF(env, "LoadDispatch", "l", 2, 2, "s", Loader, "LoadDispatch", NULL);
+	/* LoadDispatch takes (library, function, arity): strings then an integer.
+	   The restriction string is "<default>;<arg1>;<arg2>;<arg3>". */
+	AddUDFError err = AddUDF(env, "LoadDispatch", "l", 3, 3, "*;s;s;l", Loader, "LoadDispatch", NULL);
 	if (err != AUE_NO_ERROR) { return err; }
 	err = AddUDF(env, "UnLoadDispatch", "l", 2, 2, "s", UnLoader, "UnLoadDispatch", NULL);
+	if (err != AUE_NO_ERROR) { return err; }
+	err = AddUDF(env, "CleanupDispatch", "l", 2, 2, "s", Cleanup, "CleanupDispatch", NULL);
+	if (err != AUE_NO_ERROR) { return err; }
+	/* Read-only query used by the -4 error rule to name the conflicting path.
+	   Returns a string (the owning library) or the symbol FALSE. */
+	err = AddUDF(env, "DispatchLibraryOf", "sy", 1, 1, "*;sy", LibraryOf, "DispatchLibraryOf", NULL);
 	if (err != AUE_NO_ERROR) { return err; }
 	err = AddUDF(env, "Dispatch", "*", 1, UNBOUNDED, "*", Dispatcher, "Dispatch", NULL);
 	return err;
 }
 
+/* Build `construct` in `env`, returning the FIRST real error across a chain.
+   BuildError is an enumeration (BE_NO_ERROR=0, BE_COULD_NOT_BUILD_ERROR=1,
+   BE_CONSTRUCT_NOT_FOUND_ERROR=2, BE_PARSING_ERROR=3), NOT a count -- so folding
+   results with `+=` is wrong: two failures would sum to an out-of-range value
+   (e.g. 2+3=5) that is no valid enumerator, corrupting the reported error even
+   though it stays coincidentally non-zero. Instead each caller threads its running
+   result through `first_err`; every construct is still attempted (they are
+   independent), and the first failure is the one reported. */
+static BuildError build_step(Environment* env, const char* construct, BuildError first_err) {
+	BuildError err = Build(env, construct);
+	if (err != BE_NO_ERROR && first_err == BE_NO_ERROR) {
+		first_err = err;
+	}
+	return first_err;
+}
+
 static BuildError LoadErrorRules(Environment* env) {
-	BuildError build_result;
-	build_result = Build(env, ""
+	BuildError build_result = BE_NO_ERROR;
+	build_result = build_step(env, ""
 		"(defrule loader-invalid-args"
 		"   ?d <- (functions (loaded -200))"
 		"   =>"
 		"   (modify ?d "
 		"          (error \"Invalid Arguments - Must be library, function as strings\") "
 		"   )"
-		" )");
+		" )", build_result);
 
-	build_result = Build(env, ""
+	build_result = build_step(env, ""
 		"(defrule loader-invalid-function-name"
 		"   ?d <- (functions (loaded -1))"
 		"   =>"
 		"   (modify ?d "
 		"          (error \"Unable to build rule from loaded library - use ASCII characters for function\") "
 		"   )"
-		" )");
+		" )", build_result);
 
-	build_result = Build(env, ""
+	build_result = build_step(env, ""
 		"(defrule loader-invalid-function-length"
 		"   ?d <- (functions (loaded -2))"
 		"   =>"
 		"   (modify ?d "
 		"          (error \"Function name is too long, limit function name to 256 characters\") "
 		"   )"
-		" )");
+		" )", build_result);
 
-	build_result = Build(env, ""
+	build_result = build_step(env, ""
 		"(defrule loader-load-failed"
 		"   ?d <- (functions (loaded -3))"
 		"   =>"
 		"   (modify ?d "
-		"          (error \"Unable to load the requested library or function\") "
+		"          (error \"Unable to load the requested library - check the library path/filename and that its dependencies resolve\") "
 		"   )"
-		" )");
-	build_result = Build(env, ""
+		" )", build_result);
+	build_result = build_step(env, ""
+		"(defrule loader-symbol-not-found"
+		"   ?d <- (functions (loaded -6))"
+		"   =>"
+		"   (modify ?d "
+		"          (error \"Library loaded but the function was not found in it - check the exported function/symbol name\") "
+		"   )"
+		" )", build_result);
+	build_result = build_step(env, ""
+		"(defrule loader-invalid-arity"
+		"   ?d <- (functions (loaded -7))"
+		"   =>"
+		"   (modify ?d "
+		"          (error \"Declared arity is out of range - use -1 for unspecified, or 0..64\") "
+		"   )"
+		" )", build_result);
+	/* Name the CONFLICTING path rather than leaving the user to guess, and state
+	   the identity rule -- because the most common way to hit -4 is not two real
+	   libraries, it is ONE file reached by two spellings. */
+	build_result = build_step(env, ""
 		"(defrule loader-name-collision"
-		"   ?d <- (functions (loaded -4))"
+		"   ?d <- (functions (function ?func) (loaded -4))"
 		"   =>"
 		"   (modify ?d "
-		"          (error \"Function name already loaded from a different library - function names must be unique across libraries\") "
+		"          (error (str-cat \"Function name already loaded from a different library path (\" "
+		"                          (DispatchLibraryOf ?func) "
+		"                          \") - libraries are identified by the literal path string, so the same file under two spellings (./lib.so vs /abs/lib.so) counts as two libraries. Use one consistent spelling, or give the wrappers distinct function names.\")) "
 		"   )"
-		" )");
-	build_result = Build(env, ""
-		"(defrule loader-already-defined"
-		"   ?d <- (functions (loaded -5))"
-		"   =>"
-		"   (modify ?d "
-		"          (error \"Function was already defined, not redefining\") "
-		"          (loaded 1) "
-		"   )"
-		" )");
-	build_result = Build(env, ""
-		"(defrule unloader-not-deletable"
+		" )", build_result);
+	/* -30/-31 belong to CLEANUP, not unload: unload never touches the wrapper and
+	   so can never fail this way. Names now match their meaning (they used to be
+	   swapped: -30 was called "not-deletable" though it means the delete was
+	   attempted and failed, and -31 the reverse). Neither re-arms the fact -- a
+	   failed cleanup stays visibly failed rather than silently bouncing. */
+	build_result = build_step(env, ""
+		"(defrule cleanup-delete-failed"
 		"   ?d <- (functions (loaded -30))"
 		"   =>"
 		"   (modify ?d "
-		"          (error \"Unable to delete the function\") "
+		"          (error \"Function is deletable but removing it failed\") "
 		"   )"
-		" )");
-	build_result = Build(env, ""
-		"(defrule unloader-unable-to-delete"
+		" )", build_result);
+	build_result = build_step(env, ""
+		"(defrule cleanup-still-referenced"
 		"   ?d <- (functions (loaded -31))"
 		"   =>"
 		"   (modify ?d "
-		"          (error \"Function is in use, triggererd reload\") "
-		"          (action \"load\") "
-		"          (loaded 0) "
+		"          (error \"Function is still referenced by other constructs (or is executing) - remove the rules/deffunctions that call it, then retry cleanup\") "
 		"   )"
-		" )");
+		" )", build_result);
+	build_result = build_step(env, ""
+		"(defrule unloader-not-loaded"
+		"   ?d <- (functions (loaded -32))"
+		"   =>"
+		"   (modify ?d "
+		"          (error \"Function is not loaded - nothing to unload (it may have been unloaded by another environment)\") "
+		"   )"
+		" )", build_result);
 
 	return build_result;
 }
@@ -394,7 +630,7 @@ static void loader_env_destroyed(Environment* env) {
 
 
 BuildError setup_dispatcher(Environment* env) {
-	BuildError  build_result = 0;
+	BuildError  build_result = BE_NO_ERROR;
 
 	/* The library/function hash tables are process-global (shared across every
 	   environment) and are guarded by a single process-wide lock. Force its
@@ -427,33 +663,62 @@ BuildError setup_dispatcher(Environment* env) {
 		loader_env_register();
 	}
 
-	build_result += Build(env, ""
+	build_result = build_step(env, ""
 		"(deftemplate functions"
 		"    (slot library (type STRING))"
 		"    (slot function (type STRING))"
 		"    (slot action (type STRING) (default \"load\"))"
 		"    (slot loaded (type INTEGER) (default 0))"
 		"    (slot error (type STRING))"
-		")");
+		/* Optional declared SHAPE. -1 (the default) means unspecified: the
+		   generated wrapper takes ($?args), so the loader needs to know nothing
+		   about the plugin's signature. A value >= 0 generates a fixed-parameter
+		   wrapper of that arity, which preserves multifield arguments -- see
+		   DefineFuncIfRequired and dispatcher.h. */
+		"    (slot arity (type INTEGER) (default -1))"
+		")", build_result);
 
-	build_result += Build(env, ""
+	build_result = build_step(env, ""
 		"(defrule loadlib"
-		"   ?d <- (functions (library ?lib) (function ?func) (action \"load\") (loaded 0))"
+		"   ?d <- (functions (library ?lib) (function ?func) (action \"load\") (loaded 0) (arity ?ar))"
 		"   =>"
 		"   (modify ?d "
-		"          (loaded (LoadDispatch ?lib ?func)) "
+		"          (loaded (LoadDispatch ?lib ?func ?ar)) "
 		"   )"
-		" )");
-	build_result += Build(env, ""
+		" )", build_result);
+	build_result = build_step(env, ""
 		"(defrule unloadlib"
 		"   ?d <- (functions (library ?lib) (function ?func) (action \"unload\") (loaded 1))"
 		"   =>"
 		"   (modify ?d "
 		"          (loaded (UnLoadDispatch ?lib ?func)) "
 		"   )"
-		" )");
+		" )", build_result);
+	/* Retire the name in THIS environment by removing its wrapper.
+	   Orthogonal to unload -- cleanup never touches the library or the global
+	   table, and unload never touches the wrapper -- so it is accepted from either
+	   state (loaded 0 or 1) and in either order. That matters because unload is
+	   process-global while cleanup is environment-local: an environment must be
+	   able to retire its own wrapper WITHOUT unloading a library other
+	   environments are still using. Success leaves `loaded 2`, which matches no
+	   rule and is therefore terminal. */
+	build_result = build_step(env, ""
+		"(defrule cleanuplib"
+		"   ?d <- (functions (library ?lib) (function ?func) (action \"cleanup\") (loaded ?l&0|1))"
+		"   =>"
+		"   (modify ?d "
+		"          (loaded (CleanupDispatch ?lib ?func)) "
+		"   )"
+		" )", build_result);
 
-	build_result += LoadErrorRules(env);
+	/* Always build the error rules; fold their first error in only if nothing
+	   above already failed (first-error-wins, matching build_step). */
+	{
+		BuildError rules_err = LoadErrorRules(env);
+		if (build_result == BE_NO_ERROR) {
+			build_result = rules_err;
+		}
+	}
 	return build_result;
 }
 

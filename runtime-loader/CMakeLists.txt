@@ -41,25 +41,70 @@ else ()
 	target_link_libraries(dispatcher-static dl pthread)
 endif ()
 
-# --- example plugin ---
-add_library(cube SHARED plugins/Cube.c)
-target_link_libraries(cube clips)
-if (WIN32)
-	set_target_properties(cube PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
-endif ()
-
-# A second shared library built from the same plugin source, so it exports the
-# same symbols (Cube, Square) from a different file. Used by the name-collision
-# test to exercise two genuine libraries claiming the same function name.
-add_library(cube2 SHARED plugins/Cube.c)
-target_link_libraries(cube2 clips)
-if (WIN32)
-	set_target_properties(cube2 PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
-endif ()
+# --- example plugins ---
+# Each plugin owns its own build rules, so a plugin directory is a self-contained,
+# copyable template (sources + CMakeLists). This file only decides WHICH plugins
+# are included; how each one is built lives with it.
+#
+#   Cube           -- plain C, exports Cube + Square; also builds cube2 from the
+#                     same source so two distinct libraries export the same names
+#                     (name-collision tests).
+#   CubeForTesting -- TEST FIXTURE, deliberately wrong; makes a hot update
+#                     observable. Not an example to copy.
+#   IsOdd          -- assembly-backed, minimal: one masking instruction.
+#   IsPrime        -- assembly-backed, realistic: branches, a loop, multiply and
+#                     integer division -- and on x86-64 the two ABIs need
+#                     different register allocation, not just different syntax.
+#
+# The assembly plugins pick a per-(arch, toolchain) core and build nothing on
+# architectures they have no core for.
+#
+# Because a plugin may decline to build, detect it afterwards with `if (TARGET x)`:
+# targets are global across directories, whereas variables set in a subdirectory do
+# not propagate back to this scope.
+#
+# Plugins must BUILD INTO THIS DIRECTORY, not their own. The tests load them at
+# runtime by bare relative filename (tests/plugin_names.h -> "./libcube.so"), which
+# resolves against the test's working directory -- which ctest sets to the binary
+# dir of wherever add_test() was called, i.e. here. Letting each plugin build into
+# its own subdirectory silently breaks every plugin-loading test on POSIX. (Windows
+# masks this: the DLLs are copied next to each test exe below, via generator
+# expressions that resolve the target wherever it lives.) Variables DO propagate
+# down into subdirectories, so the plugins read this one.
+set(RUNTIME_LOADER_PLUGIN_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}")
+add_subdirectory(plugins/Cube)
+add_subdirectory(plugins/CubeForTesting)
+add_subdirectory(plugins/IsOdd)
+add_subdirectory(plugins/IsPrime)
+add_subdirectory(plugins/MatrixMultiplyAMX)
 
 # --- standalone CLI application ---
 add_executable(runtime-clips app/main.c)
 target_link_libraries(runtime-clips dispatcher clips)
+
+# --- pre-1.0 packaging: shared-library version + install-tree rpath ---
+# Version the shared dispatcher so it carries a SONAME (libdispatcher.so.1 on ELF)
+# / a compatibility+current version (on Mach-O), the basis for ABI-tracked upgrades.
+# VERSION is the release version; SOVERSION is the ABI version consumers link
+# against -- bump SOVERSION only on an ABI break. Set to the intended first stable
+# release (1.0); adjust both if the project versions the pre-1.0 line as 0.x.
+set_target_properties(dispatcher PROPERTIES VERSION 1.0.0 SOVERSION 1)
+
+# Make the INSTALLED binaries resolve their sibling shared libs without the caller
+# exporting DYLD_LIBRARY_PATH / LD_LIBRARY_PATH. The install-names are already
+# @rpath/* (CMake's default), but CMake strips the build-tree rpaths on install and
+# adds nothing -- so an installed runtime-clips currently finds neither
+# libdispatcher nor libclips. Give the consumers a loader-relative rpath to the
+# install libdir (runtime-clips is in bin/, dispatcher + libclips in lib/); relative
+# (@loader_path / $ORIGIN) keeps the install relocatable across prefixes. Windows
+# has no rpath (DLLs are copied beside the exe / found via PATH), so skip it there.
+if (APPLE)
+	set_target_properties(runtime-clips PROPERTIES INSTALL_RPATH "@loader_path/../lib")
+	set_target_properties(dispatcher    PROPERTIES INSTALL_RPATH "@loader_path")
+elseif (NOT WIN32)
+	set_target_properties(runtime-clips PROPERTIES INSTALL_RPATH "$ORIGIN/../lib")
+	set_target_properties(dispatcher    PROPERTIES INSTALL_RPATH "$ORIGIN")
+endif ()
 
 # --- regression test ---
 add_executable(testdispatch tests/test.c)
@@ -103,6 +148,122 @@ add_executable(test_udf_registration_failure tests/udf_registration_failure.c)
 target_link_libraries(test_udf_registration_failure dispatcher clips)
 add_test(test_udf_registration_failure test_udf_registration_failure)
 
+# F7: unloading via an env that never loaded the function (no local deffunction)
+#     must not crash on the NULL FindDeffunction result.
+add_executable(test_unload_without_deffunction tests/unload_without_deffunction.c)
+target_link_libraries(test_unload_without_deffunction dispatcher clips)
+add_test(test_unload_without_deffunction test_unload_without_deffunction)
+add_dependencies(test_unload_without_deffunction cube)
+
+# F8: unloading a function not in the global table (never loaded, or already
+#     unloaded) must set a defined result (-32), never leave `out` unset.
+add_executable(test_unload_not_loaded tests/unload_not_loaded.c)
+target_link_libraries(test_unload_not_loaded dispatcher clips)
+add_test(test_unload_not_loaded test_unload_not_loaded)
+add_dependencies(test_unload_not_loaded cube)
+# the F8 failure mode is an unset UDFValue driving the rule loop forever (verified:
+# with the fix reverted this test spins, it doesn't exit) -- cap it so a regression
+# fails in seconds instead of hanging CI until ctest's default 1500s timeout.
+set_tests_properties(test_unload_not_loaded PROPERTIES TIMEOUT 60)
+
+# setup_dispatcher must build every hardcoded construct: guards the BuildError
+# propagation fix (a malformed construct surfaces as a non-zero return) AND checks
+# each rule/template exists by name (catches silent same-name replacement, the F4
+# bug class). No plugin needed -- never loads a library.
+add_executable(test_setup_constructs tests/setup_constructs.c)
+target_link_libraries(test_setup_constructs dispatcher clips)
+add_test(test_setup_constructs test_setup_constructs)
+
+# F4 race hardening: two libraries claiming the same name concurrently must yield
+# exactly one winner + the other refused (-4), never a misrouted success. Needs
+# cube + cube2 and threads.
+add_executable(test_concurrent_name_collision tests/concurrent_name_collision.cpp)
+target_link_libraries(test_concurrent_name_collision dispatcher clips Threads::Threads)
+add_test(test_concurrent_name_collision test_concurrent_name_collision)
+add_dependencies(test_concurrent_name_collision cube cube2)
+
+# load-failure diagnosis: a bad library path yields -3, a real library missing the
+# requested symbol yields -6 (previously both were an ambiguous -3). Needs cube for
+# the real-library / missing-symbol and positive-control cases.
+add_executable(test_load_failure_codes tests/load_failure_codes.c)
+target_link_libraries(test_load_failure_codes dispatcher clips)
+add_test(test_load_failure_codes test_load_failure_codes)
+add_dependencies(test_load_failure_codes cube)
+
+# teardown_dispatcher(): the loader's explicit destructor for its process-global
+# state. Covers the live-environment guard (refuse, and change nothing), that the
+# guard is a COUNT not a flag, that teardown empties the tables, that the loader is
+# REUSABLE afterwards (the shared lock is destroyed and must be rebuilt), and that
+# a repeated teardown is safe.
+add_executable(test_teardown_lifecycle tests/teardown_lifecycle.c)
+target_link_libraries(test_teardown_lifecycle dispatcher clips)
+add_test(test_teardown_lifecycle test_teardown_lifecycle)
+add_dependencies(test_teardown_lifecycle cube)
+
+# The two-tier lifecycle: unload is a non-destructive BOUNCE (library released,
+# wrapper kept, succeeds even while defrules reference the function, reload
+# revives the same wrapper); cleanup is the explicit teardown that retires the
+# name, and is refused until the caller removes the referencing constructs.
+add_executable(test_bounce_cleanup tests/bounce_cleanup.c)
+target_link_libraries(test_bounce_cleanup dispatcher clips)
+add_test(test_bounce_cleanup test_bounce_cleanup)
+add_dependencies(test_bounce_cleanup cube)
+
+# The payoff case: physically overwrite a plugin's library file between an unload
+# and a load and prove the running rule base picks up the NEW code without any
+# rule being rebuilt. Needs cube (v1) and cube_for_testing (a different implementation of
+# the same exported name) to make the swap observable.
+add_executable(test_hot_update tests/hot_update.c)
+target_link_libraries(test_hot_update dispatcher clips)
+# Unlike every other test, this one manipulates the plugin FILES (fopen/rename) as
+# well as loading them. Those two resolve differently: LoadLibrary/dlopen find a
+# plugin next to the executable, but fopen resolves against the CURRENT WORKING
+# DIRECTORY. ctest defaults that to the binary dir of wherever add_test was called
+# -- which on multi-config generators (MSBuild) is NOT where the binaries are:
+# they go in a per-config subdirectory (runtime-loader/Release/). So pin the
+# working directory to the executable's own directory: the same place on
+# single-config generators, the per-config dir on multi-config ones.
+#
+# NOTE the add_test(NAME ... COMMAND ...) signature is required here -- its
+# WORKING_DIRECTORY evaluates generator expressions, whereas the WORKING_DIRECTORY
+# set via set_tests_properties() does NOT (it would be written to
+# CTestTestfile.cmake literally).
+add_test(NAME test_hot_update
+	COMMAND test_hot_update
+	WORKING_DIRECTORY "$<TARGET_FILE_DIR:test_hot_update>")
+add_dependencies(test_hot_update cube cube_for_testing)
+if (MSVC)
+	# fopen/rename are the point of this test; MSVC's _s variants are not portable.
+	target_compile_definitions(test_hot_update PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif ()
+
+# End-to-end test of the assembly-backed IsOdd plugin -- only where that plugin has
+# an assembly core for this architecture (see plugins/IsOdd/CMakeLists.txt).
+if (TARGET isodd)
+	add_executable(test_isodd tests/isodd.c)
+	target_link_libraries(test_isodd dispatcher clips)
+	add_test(test_isodd test_isodd)
+	add_dependencies(test_isodd isodd)
+endif ()
+
+# Apple Silicon only: the AMX coprocessor example. The test checks the result
+# against a plain-C reference rather than hardcoded numbers, because the plugin
+# drives undocumented hardware through reverse-engineered encodings.
+if (TARGET matrixmultiply)
+	add_executable(test_matrixmultiply tests/matrixmultiply.c)
+	target_link_libraries(test_matrixmultiply dispatcher clips)
+	add_test(test_matrixmultiply test_matrixmultiply)
+	add_dependencies(test_matrixmultiply matrixmultiply)
+endif ()
+
+# The richer assembly example: branches, a loop, multiply and integer division.
+if (TARGET isprime)
+	add_executable(test_isprime tests/isprime.c)
+	target_link_libraries(test_isprime dispatcher clips)
+	add_test(test_isprime test_isprime)
+	add_dependencies(test_isprime isprime)
+endif ()
+
 if (WIN32)
 	# no rpath on windows: copy clips.dll next to each exe, and the plugin DLLs
 	# next to the test exes that LoadLibrary them at runtime, so they resolve.
@@ -124,6 +285,43 @@ if (WIN32)
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:cube>  $<TARGET_FILE_DIR:test_concurrent_load>)
 	add_custom_command(TARGET test_udf_registration_failure POST_BUILD
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips> $<TARGET_FILE_DIR:test_udf_registration_failure>)
+	add_custom_command(TARGET test_unload_without_deffunction POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips> $<TARGET_FILE_DIR:test_unload_without_deffunction>
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:cube>  $<TARGET_FILE_DIR:test_unload_without_deffunction>)
+	add_custom_command(TARGET test_unload_not_loaded POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips> $<TARGET_FILE_DIR:test_unload_not_loaded>
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:cube>  $<TARGET_FILE_DIR:test_unload_not_loaded>)
+	add_custom_command(TARGET test_setup_constructs POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips> $<TARGET_FILE_DIR:test_setup_constructs>)
+	add_custom_command(TARGET test_concurrent_name_collision POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips> $<TARGET_FILE_DIR:test_concurrent_name_collision>
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:cube>  $<TARGET_FILE_DIR:test_concurrent_name_collision>
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:cube2> $<TARGET_FILE_DIR:test_concurrent_name_collision>)
+	add_custom_command(TARGET test_load_failure_codes POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips> $<TARGET_FILE_DIR:test_load_failure_codes>
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:cube>  $<TARGET_FILE_DIR:test_load_failure_codes>)
+	add_custom_command(TARGET test_teardown_lifecycle POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips> $<TARGET_FILE_DIR:test_teardown_lifecycle>
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:cube>  $<TARGET_FILE_DIR:test_teardown_lifecycle>)
+	add_custom_command(TARGET test_bounce_cleanup POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips> $<TARGET_FILE_DIR:test_bounce_cleanup>
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:cube>  $<TARGET_FILE_DIR:test_bounce_cleanup>)
+	add_custom_command(TARGET test_hot_update POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips>   $<TARGET_FILE_DIR:test_hot_update>
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:cube>    $<TARGET_FILE_DIR:test_hot_update>
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:cube_for_testing> $<TARGET_FILE_DIR:test_hot_update>)
+	# test_isodd exists only where the IsOdd plugin has an assembly core for this
+	# architecture; it LoadLibrary's isodd.dll at runtime, so copy that too.
+	if (TARGET isodd)
+		add_custom_command(TARGET test_isodd POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips> $<TARGET_FILE_DIR:test_isodd>
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:isodd> $<TARGET_FILE_DIR:test_isodd>)
+	endif ()
+	if (TARGET isprime)
+		add_custom_command(TARGET test_isprime POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips>   $<TARGET_FILE_DIR:test_isprime>
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:isprime> $<TARGET_FILE_DIR:test_isprime>)
+	endif ()
 	add_custom_command(TARGET runtime-clips POST_BUILD
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips> $<TARGET_FILE_DIR:runtime-clips>)
 endif ()

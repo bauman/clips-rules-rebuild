@@ -4,6 +4,7 @@
 #include "clips.h"
 #include "dispatcher.h"
 #include "plugin_names.h"
+#include "run_bounded.h"
 
 /*
  * F2 regression: unloading is process-global. Two environments share the one
@@ -23,10 +24,11 @@ static long long eval_int(Environment* env, const char* expr, int* ok)
    return rv.integerValue->contents;
 }
 
-static void load_cube(Environment* env)
+/* Returns 0 on success, non-zero if the load rule loop ran away. */
+static int load_cube(Environment* env)
 {
    AssertString(env, "(functions (library \"" CUBE_LIB "\") (function \"Cube\"))");
-   Run(env, -1);
+   return (run_bounded(env, 10, 6, "load Cube") < 0) ? 1 : 0;
 }
 
 int main(void)
@@ -40,8 +42,7 @@ int main(void)
    if ((setup_dispatcher(a) != BE_NO_ERROR) || (setup_dispatcher(b) != BE_NO_ERROR))
      { fprintf(stderr, "setup_dispatcher failed\n"); return 1; }
 
-   load_cube(a);
-   load_cube(b);
+   if (load_cube(a) || load_cube(b)) { return 1; }
 
    /* both environments dispatch correctly to start */
    if (eval_int(a, "(Cube 3)", &ok) != 27 || !ok) { fprintf(stderr, "FAIL: env A Cube(3) != 27\n"); failures++; }
@@ -49,7 +50,7 @@ int main(void)
 
    /* env A unloads Cube -- process-global, so it disappears for env B too */
    Eval(a, "(do-for-fact ((?f functions)) (eq ?f:function \"Cube\") (modify ?f (action \"unload\")))", NULL);
-   Run(a, -1);
+   if (run_bounded(a, 10, 6, "env A unload Cube") < 0) { return 1; }
 
    /* env B still has its deffunction; the Dispatch must fail safe to FALSE */
    if (Eval(b, "(Cube 3)", &rv) != EE_NO_ERROR)

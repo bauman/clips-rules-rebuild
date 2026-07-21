@@ -19,6 +19,8 @@ void* free_lib(void* v_hinstLib) {
         HINSTANCE hinstLib = *hinstLib_p;
         bool freed = (FreeLibrary(hinstLib) != 0);   /* FreeLibrary: nonzero == success */
 #else
+
+
         bool freed = (dlclose(v_hinstLib) == 0);     /* dlclose: 0 == success (opposite of FreeLibrary) */
 #endif
         if (freed) {
@@ -34,7 +36,12 @@ void* load_lib(const char* dll_name)
 #ifdef WIN32
     void* v_hinstLib = calloc(1, sizeof(HINSTANCE));
     if (v_hinstLib) {
-        HINSTANCE hinstLib = LoadLibrary(TEXT(dll_name));
+        /* LoadLibraryA (not LoadLibrary/TEXT): dll_name is a narrow char* from a
+           CLIPS string fact, so use the ANSI entry point explicitly. TEXT() is for
+           string LITERALS -- applied to a variable under a UNICODE build it
+           token-pastes into the bogus identifier `Ldll_name` and fails to compile;
+           plain LoadLibrary would resolve to LoadLibraryW and want a wchar_t*. */
+        HINSTANCE hinstLib = LoadLibraryA(dll_name);
         memcpy_s(v_hinstLib, sizeof(HINSTANCE), &hinstLib, sizeof(HINSTANCE));
         if (!hinstLib) {
             free(v_hinstLib);
@@ -56,7 +63,10 @@ CALLABLE load_fn(void* v_hinstLib, const char * func_name)
 #ifdef WIN32
         HINSTANCE* hinstLib_p = (HINSTANCE*)v_hinstLib;
         HINSTANCE hinstLib = *hinstLib_p;
-        ProcAdd = (CALLABLE)GetProcAddress(hinstLib, TEXT(func_name));
+        /* No TEXT(): GetProcAddress is always narrow (LPCSTR) -- there is no W
+           variant -- and func_name is a narrow char* anyway. TEXT() here was both
+           unnecessary and a UNICODE-build compile break (see load_lib). */
+        ProcAdd = (CALLABLE)GetProcAddress(hinstLib, func_name);
 #else
         ProcAdd = (CALLABLE) dlsym(v_hinstLib, func_name);
 #endif

@@ -1,8 +1,10 @@
 #include <stdio.h>
+#include <string.h>
 
 #include "clips.h"
 #include "dispatcher.h"
 #include "plugin_names.h"
+#include "run_bounded.h"
 
 /*
  * F1 regression: unloading one function of a multi-function library must NOT
@@ -30,20 +32,34 @@ int main(void)
 
    AssertString(env, "(functions (library \"" CUBE_LIB "\") (function \"Cube\"))");
    AssertString(env, "(functions (library \"" CUBE_LIB "\") (function \"Square\"))");
-   Run(env, -1);
+   /* two load facts asserted here, so two loadlib firings are expected */
+   if (run_bounded(env, 10, 6, "load Cube + Square") < 0) { return 1; }
 
    if (eval_int(env, "(Cube 3)") != 27)   { fprintf(stderr, "FAIL: Cube(3) != 27 before unload\n"); failures++; }
    if (eval_int(env, "(Square 3)") != 9)  { fprintf(stderr, "FAIL: Square(3) != 9 before unload\n"); failures++; }
 
    /* unload only Cube; Square (same library) must keep working */
    Eval(env, "(do-for-fact ((?f functions)) (eq ?f:function \"Cube\") (modify ?f (action \"unload\")))", NULL);
-   Run(env, -1);
+   if (run_bounded(env, 10, 6, "unload Cube only") < 0) { return 1; }
 
    if (eval_int(env, "(Square 3)") != 9)
      { fprintf(stderr, "FAIL: Square(3) != 9 after unloading its sibling Cube (F1 regression)\n"); failures++; }
 
-   if (FindDeffunction(env, "Cube") != NULL)
-     { fprintf(stderr, "FAIL: Cube deffunction still defined after unload\n"); failures++; }
+   /* Unload is a BOUNCE: it releases the library but deliberately KEEPS this
+      environment's wrapper, so rules referencing the function stay valid and the
+      library can be replaced and reloaded. The wrapper is inert while unloaded --
+      Dispatch misses the global table and fails safe to FALSE. Retiring the name
+      itself is the separate `cleanup` action. */
+   if (FindDeffunction(env, "Cube") == NULL)
+     { fprintf(stderr, "FAIL: Cube wrapper was removed by unload (should survive for the bounce)\n"); failures++; }
+
+   {
+      CLIPSValue rv;
+      if (Eval(env, "(Cube 3)", &rv) != EE_NO_ERROR)
+        { fprintf(stderr, "FAIL: calling unloaded Cube errored instead of failing safe\n"); failures++; }
+      else if (rv.header->type != SYMBOL_TYPE || strcmp(rv.lexemeValue->contents, "FALSE") != 0)
+        { fprintf(stderr, "FAIL: unloaded Cube did not fail safe to FALSE\n"); failures++; }
+   }
 
    DestroyEnvironment(env);
 
