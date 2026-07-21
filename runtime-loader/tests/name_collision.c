@@ -1,10 +1,28 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "clips.h"
 #include "dispatcher.h"
 #include "plugin_names.h"
 #include "run_bounded.h"
+
+/*
+ * Absolute spelling of a path, portably.
+ *
+ * realpath() is POSIX-only -- MSVC has no such symbol, and using it here failed to
+ * LINK on every Windows leg. _fullpath() is the CRT equivalent and has the same
+ * shape (fills the buffer, returns it or NULL).
+ *
+ * The difference between them does not matter for this test: _fullpath only makes
+ * a path absolute and does not resolve symlinks, but all we need is a DIFFERENT
+ * SPELLING of the same file, which is exactly what it produces.
+ */
+#ifdef WIN32
+#  define ABSPATH(dst, src) _fullpath((dst), (src), sizeof(dst))
+#else
+#  define ABSPATH(dst, src) realpath((src), (dst))
+#endif
 
 /*
  * F4 regression: function names must be unique across ALL libraries. A name
@@ -80,15 +98,24 @@ int main(void)
       char abs[1200];
       char fact[1400];
       CLIPSValue rv;
-      if (realpath(CUBE_LIB, abs) == NULL)
+      if (ABSPATH(abs, CUBE_LIB) == NULL)
         {
          /* Never silently skip: ctest runs us from the directory holding the
             plugin, so this resolving is part of the contract being tested. */
-         fprintf(stderr, "FAIL: could not realpath %s (wrong working directory?)\n", CUBE_LIB);
+         fprintf(stderr, "FAIL: could not resolve an absolute path for %s (wrong working directory?)\n", CUBE_LIB);
          failures++;
         }
       else
         {
+         char* p;
+         /* Windows returns backslash paths, and CLIPS treats backslash as an
+            ESCAPE inside a string literal -- embedding "D:\\a\\b\\cube.dll" in a
+            fact silently yields "D:abcube.dll", so the load would fail as a bad
+            path (-3) instead of the collision (-4) we are testing. Normalise to
+            forward slashes, which Windows accepts in LoadLibrary and which need no
+            escaping. A no-op on POSIX. */
+         for (p = abs; *p != '\0'; p++) { if (*p == '\\') { *p = '/'; } }
+
          snprintf(fact, sizeof fact,
                   "(functions (library \"%s\") (function \"Cube\"))", abs);
          AssertString(env, fact);
