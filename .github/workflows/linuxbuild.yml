@@ -107,18 +107,24 @@ jobs:
       # the runtime-loader headers were installed but never shipped.
       #
       # Staging captures whatever CMake installs, so new install() rules are picked up
-      # automatically. The system install above is kept because the clipspy build needs
-      # libclips discoverable via /usr/lib + ldconfig; this is an extra, sudo-free copy
-      # purely for packaging. `zip -y` stores the SOVERSION symlinks as symlinks rather
-      # than duplicating the library three times and losing the soname chain.
+      # automatically. The system install is kept as well, because the clipspy build
+      # needs libclips discoverable via /usr/lib + ldconfig; the staged copy is an
+      # extra, sudo-free install used only for packaging. `zip -y` stores the SOVERSION
+      # symlinks as symlinks rather than duplicating the library three times and losing
+      # the soname chain.
+      #
+      # ORDER MATTERS: the staged (unprivileged) install must run BEFORE the sudo one.
+      # `cmake --install` writes install_manifest.txt into the BUILD directory, so a
+      # sudo install first leaves that file owned by root and the staging install then
+      # dies with "Permission denied". Do not swap these two lines.
       - name: build static 6.4.2 release
         run:
           mkdir cmake-build-static-642-release ;
           cd cmake-build-static-642-release ;
           cmake -Dbuild-642=ON -Dstatic-cli=ON  -DCMAKE_INSTALL_PREFIX=/usr .. ;
           cmake --build .  --config Release  ;
-          sudo cmake --install . ;
           DESTDIR=$GITHUB_WORKSPACE/stage-static-642 cmake --install . ;
+          sudo cmake --install . ;
           cd .. ;
           mkdir -p release-artifacts ;
           cd stage-static-642 ;
@@ -132,8 +138,8 @@ jobs:
           cmake -Dbuild-642=ON -Dstatic-cli=OFF -DCMAKE_INSTALL_PREFIX=/usr .. ;
           cmake --build .  --config Release  ;
           ctest;
-          sudo cmake --install . ;
           DESTDIR=$GITHUB_WORKSPACE/stage-dynamic-642 cmake --install . ;
+          sudo cmake --install . ;
           cd .. ;
           mkdir -p release-artifacts ;
           cd stage-dynamic-642 ;
