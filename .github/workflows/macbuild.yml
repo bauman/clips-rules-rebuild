@@ -59,6 +59,24 @@ jobs:
           DYLD_LIBRARY_PATH=/usr/local/lib python3 -c "import clips"
 
       # 6.4.2 is the published C library (installed last).
+      #
+      # PACKAGING: the release zip is built from a DESTDIR-staged copy of the install,
+      # not by listing paths under /usr/local. The prefix here is a real system
+      # directory, so archiving it wholesale is not an option (unlike Windows, where
+      # C:\usr contains only this project) -- and the old explicit file list silently
+      # omitted anything added later. It missed runtime-loader entirely: libdispatcher,
+      # runtime-clips and the runtime-loader headers were installed but never shipped.
+      #
+      # Staging captures whatever CMake installs, so new install() rules are picked up
+      # automatically. The system install is kept as well, because the clipspy build
+      # needs libclips on the dyld path; the staged copy is an extra, sudo-free install
+      # used only for packaging. `zip -y` stores the SOVERSION symlinks as symlinks
+      # rather than duplicating the library and losing the soname chain.
+      #
+      # ORDER MATTERS: the staged (unprivileged) install must run BEFORE the sudo one.
+      # `cmake --install` writes install_manifest.txt into the BUILD directory, so a
+      # sudo install first leaves that file owned by root and the staging install then
+      # dies with "Permission denied". Do not swap these two lines.
       - name: build dynamic 6.4.2 release
         run: |
           mkdir cmake-build-dynamic-642-release
@@ -66,10 +84,13 @@ jobs:
           cmake -Dbuild-642=ON -Dstatic-cli=OFF -DCMAKE_INSTALL_PREFIX=/usr/local ..
           cmake --build . --config Release
           ctest
+          DESTDIR="$GITHUB_WORKSPACE/stage-dynamic-642" cmake --install .
           sudo cmake --install .
           cd ..
           mkdir -p release-artifacts
-          zip release-artifacts/clips-642-${{ matrix.os }}-${GITHUB_RUN_NUMBER}.zip /usr/local/bin/clipscli /usr/local/include/clips-642/*.h /usr/local/lib/libclips*
+          cd stage-dynamic-642
+          zip -r -y ../release-artifacts/clips-642-${{ matrix.os }}-${GITHUB_RUN_NUMBER}.zip usr
+          cd ..
           file /usr/local/bin/clipscli
 
       - uses: actions/upload-artifact@v4
