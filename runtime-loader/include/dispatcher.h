@@ -86,6 +86,37 @@
  * teardown_dispatcher). If you must bounce in-process, do it when no other
  * environment is mid-call on that function.
  *
+ * DECLARED SHAPE (the optional `arity` slot) -- controls the wrapper that gets
+ * generated for the function, and with it who validates the call:
+ *
+ *   arity -1 (the DEFAULT, "unspecified"):
+ *       (deffunction NAME ($?args) (Dispatch NAME (expand$ ?args)))
+ *     The loader stays entirely signature-agnostic -- any exported symbol can be
+ *     wrapped without declaring anything, which is right for ordinary scalar
+ *     functions (see the Cube / IsOdd / IsPrime examples). CLIPS accepts any call,
+ *     so ALL validation lands in the plugin, which reports refusal as FAIL.
+ *     CAVEAT: a $?args parameter FLATTENS multifields. Calling
+ *         (F (create$ 1 2 3) (create$ 4 5))
+ *     binds ?args to ONE 5-element multifield, and expand$ passes 5 loose scalars.
+ *     A plugin under this wrapper therefore NEVER receives a multifield argument
+ *     -- only scalars. (Returning a multifield works fine either way.)
+ *
+ *   arity N (0 .. 64):
+ *       (deffunction NAME (?a1 ... ?aN) (Dispatch NAME ?a1 ... ?aN))
+ *     Fixed parameters, so each one PRESERVES a multifield. This is the only way
+ *     to pass more than one multifield: CLIPS multifields cannot nest, so nothing
+ *     can be encoded inside a single one. Declaring a shape is what lets a plugin
+ *     take structured arguments -- e.g. MatrixMultiply taking two 8-element
+ *     matrices. An out-of-range value is refused with -7.
+ *
+ *   THE TRADE, and why it is per-plugin: declaring a shape moves SIGNATURE errors
+ *   to CLIPS, which rejects a wrong-sized call itself ([ARGACCES1]) before the
+ *   plugin runs. It does NOT take away the plugin's voice -- argument CONTENT and
+ *   environment refusals (e.g. "this host has no such coprocessor") are still the
+ *   plugin's to report, and still come back as FAIL. Splitting them is usually an
+ *   improvement: "you called this wrong" and "I cannot run here" become two
+ *   distinguishable diagnostics instead of one ambiguous FAIL.
+ *
  * `loaded` SLOT VALUES -- the fact protocol reports every outcome here, and each
  * failure also fills the `error` slot with an explanatory message:
  *
@@ -99,6 +130,7 @@
  *         library (see CONSTRAINT above)
  *     -6  the library loaded but the SYMBOL was not found in it -- wrong or
  *         misspelled function name, or it is not exported
+ *     -7  the declared `arity` is out of range (use -1, or 0..64)
  *    -30  cleanup: the wrapper was deletable but removing it failed
  *    -31  cleanup: refused, the wrapper is still referenced by other constructs
  *         (or is currently executing) -- remove them and retry

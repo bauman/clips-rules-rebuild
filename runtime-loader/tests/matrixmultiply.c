@@ -49,11 +49,12 @@ static void check_product(Environment* env, const double A[8], const double B[8]
    double expected[4];
    int i, n;
 
-   /* 16 scalars: A (2x4) then B (4x2). The loader's wrapper flattens multifields,
-      so (MatrixMultiply (create$ ...) (create$ ...)) arrives identically -- both
-      spellings are exercised below. */
+   /* Two multifields: A (2x4) then B (4x2). This only works because the load fact
+      declared (arity 2) -- under the default wildcard wrapper these would flatten
+      into 16 loose scalars and the boundary between the matrices would be lost. */
    n = snprintf(expr, sizeof expr,
-                "(MatrixMultiply %g %g %g %g %g %g %g %g %g %g %g %g %g %g %g %g)",
+                "(MatrixMultiply (create$ %g %g %g %g %g %g %g %g)"
+                "                (create$ %g %g %g %g %g %g %g %g))",
                 A[0],A[1],A[2],A[3],A[4],A[5],A[6],A[7],
                 B[0],B[1],B[2],B[3],B[4],B[5],B[6],B[7]);
    if (n <= 0 || (size_t)n >= sizeof expr) { fail(failures, "expression too long"); return; }
@@ -107,13 +108,14 @@ int main(void)
    if (env == NULL) { fprintf(stderr, "could not create environment\n"); return 1; }
    if (setup_dispatcher(env) != BE_NO_ERROR) { fprintf(stderr, "setup_dispatcher failed\n"); return 1; }
 
-   AssertString(env, "(functions (library \"" MATMUL_LIB "\") (function \"MatrixMultiply\"))");
+   AssertString(env, "(functions (library \"" MATMUL_LIB "\") (function \"MatrixMultiply\")"
+                     " (arity 2))");   /* declared shape: two multifield arguments */
    if (run_bounded(env, 10, 6, "load MatrixMultiply") < 0) { return 1; }
 
    /* If the plugin refuses this host, every product call returns FAIL. That is a
       correct outcome for the contract, but it means the arithmetic below proves
       nothing -- so say so loudly rather than reporting a hollow pass. */
-   if (Eval(env, "(MatrixMultiply 1 2 3 4 5 6 7 8 1 0 0 1 0 0 0 0)", &rv) == EE_NO_ERROR
+   if (Eval(env, "(MatrixMultiply (create$ 1 2 3 4 5 6 7 8) (create$ 1 0 0 1 0 0 0 0))", &rv) == EE_NO_ERROR
        && rv.header->type == SYMBOL_TYPE && strcmp(rv.lexemeValue->contents, "FAIL") == 0)
      {
       fprintf(stderr, "SKIP: the plugin refused this host (no AMX) -- arithmetic not exercised\n");
@@ -147,10 +149,11 @@ int main(void)
    }
 
    /* the contract: malformed arguments are refused as FAIL, never a crash */
-   check_symbol(env, "(MatrixMultiply 1 2 3)", "FAIL", &failures);                       /* too few */
-   check_symbol(env, "(MatrixMultiply 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17)", "FAIL", &failures); /* too many */
-   check_symbol(env, "(MatrixMultiply 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 abc)", "FAIL", &failures);   /* non-number */
-   check_symbol(env, "(MatrixMultiply \"a\" 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16)", "FAIL", &failures);/* string */
+   /* CONTENT errors are still the plugin's to report, and still come back as FAIL */
+   check_symbol(env, "(MatrixMultiply (create$ 1 2 3) (create$ 1 2 3 4 5 6 7 8))", "FAIL", &failures);        /* short A */
+   check_symbol(env, "(MatrixMultiply (create$ 1 2 3 4 5 6 7 8) (create$ 1 2 3))", "FAIL", &failures);        /* short B */
+   check_symbol(env, "(MatrixMultiply 7 (create$ 1 2 3 4 5 6 7 8))", "FAIL", &failures);                      /* not a multifield */
+   check_symbol(env, "(MatrixMultiply (create$ a b c d e f g h) (create$ 1 2 3 4 5 6 7 8))", "FAIL", &failures); /* non-numbers */
 
    DestroyEnvironment(env);
 

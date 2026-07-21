@@ -173,18 +173,77 @@ void Dispatcher(
 	}
 }
 
+/* Upper bound on a declared arity. Generous for a dispatched call, and it keeps
+   the generated deffunction text comfortably inside `builder` below. */
+#define LOADER_MAX_ARITY 64
+
+/*
+ * Build this environment's wrapper deffunction for `function`.
+ *
+ * TWO SHAPES, chosen by the `arity` slot on the load fact:
+ *
+ *   arity < 0 (the default, "unspecified") -- a wildcard wrapper:
+ *       (deffunction NAME ($?args) (Dispatch NAME (expand$ ?args)))
+ *     The loader stays completely signature-agnostic: any exported symbol can be
+ *     wrapped without declaring anything. The cost is that a $?args parameter
+ *     FLATTENS multifields, so the plugin only ever sees scalars, and CLIPS
+ *     accepts any call -- ALL arity/type validation lands in the plugin, which
+ *     reports refusal as FAIL.
+ *
+ *   arity N >= 0 -- a fixed-parameter wrapper:
+ *       (deffunction NAME (?a1 ... ?aN) (Dispatch NAME ?a1 ... ?aN))
+ *     Each parameter preserves a multifield, so a plugin can take structured
+ *     arguments (CLIPS multifields cannot nest, so separate parameters are the
+ *     ONLY way to pass more than one). In exchange CLIPS now enforces the arity
+ *     itself and rejects a wrong-sized call before the plugin runs.
+ *
+ * That trade is deliberate and per-plugin: declaring a shape moves *signature*
+ * errors to CLIPS while leaving *environment* refusals (e.g. "this host has no
+ * such coprocessor") with the plugin, where they belong. See dispatcher.h.
+ */
 void DefineFuncIfRequired(
-	Environment* env, 
+	Environment* env,
 	UDFContext* udfc,
 	UDFValue* out,
-	const char* function) {
+	const char* function,
+	long long arity) {
 	BuildError build_result;
-	char builder[1024] = { 0 };
+	char builder[2048] = { 0 };
+	char params[768] = { 0 };
+	char passed[768] = { 0 };
 
 	Deffunction* func =  FindDeffunction(env, function);
 	if (!func) {
-		int written = snprintf((char *)&builder, 1024, "(deffunction %s ($?args) 	(Dispatch %s (expand$ ?args)))", function, function);
-		if (written > 0 && written < 1024) {
+		int written;
+
+		if (arity > LOADER_MAX_ARITY) {
+			out->integerValue = CreateInteger(env, -7);
+			return;
+		}
+
+		if (arity < 0) {
+			written = snprintf(builder, sizeof(builder),
+				"(deffunction %s ($?args) 	(Dispatch %s (expand$ ?args)))", function, function);
+		} else {
+			size_t plen = 0, alen = 0;
+			long long i;
+			for (i = 0; i < arity; i++) {
+				int pn = snprintf(params + plen, sizeof(params) - plen, "%s?a%lld",
+				                  (i == 0) ? "" : " ", i + 1);
+				int an = snprintf(passed + alen, sizeof(passed) - alen, " ?a%lld", i + 1);
+				if (pn <= 0 || (size_t)pn >= sizeof(params) - plen ||
+				    an <= 0 || (size_t)an >= sizeof(passed) - alen) {
+					out->integerValue = CreateInteger(env, -2);
+					return;
+				}
+				plen += (size_t)pn;
+				alen += (size_t)an;
+			}
+			written = snprintf(builder, sizeof(builder),
+				"(deffunction %s (%s) 	(Dispatch %s%s))", function, params, function, passed);
+		}
+
+		if (written > 0 && (size_t)written < sizeof(builder)) {
 			build_result = Build(env, builder);
 			if (build_result) {
 				out->integerValue = CreateInteger(env, -1);
@@ -208,15 +267,19 @@ void Loader(
 	Environment* env,
 	UDFContext* udfc,
 	UDFValue* out) {
-	UDFValue library, function;
-	if (!UDFNthArgument(udfc, 1, STRING_BIT, &library) || !UDFNthArgument(udfc, 2, STRING_BIT, &function))
+	UDFValue library, function, arity;
+	if (!UDFNthArgument(udfc, 1, STRING_BIT, &library) ||
+	    !UDFNthArgument(udfc, 2, STRING_BIT, &function) ||
+	    !UDFNthArgument(udfc, 3, INTEGER_BIT, &arity))
 	{
 		out->integerValue = CreateInteger(env, -200);
 		return;   /* args not populated -- must not fall through and deref them */
 	}
 	int loaded = PerformLoading(library.lexemeValue->contents, function.lexemeValue->contents);
 	if (loaded > 0) {
-		DefineFuncIfRequired(env, udfc, out, (const char*)function.lexemeValue->contents);
+		/* arity < 0 means "unspecified" -> the signature-agnostic wildcard wrapper */
+		DefineFuncIfRequired(env, udfc, out, (const char*)function.lexemeValue->contents,
+		                     arity.integerValue->contents);
 	}
 	else {
 		/* Pass the diagnostic failure code straight through -- each has its own
@@ -392,7 +455,9 @@ long loader_function_count(void) {
 AddUDFError LoadUserFunctions(
 	Environment* env)
 {
-	AddUDFError err = AddUDF(env, "LoadDispatch", "l", 2, 2, "s", Loader, "LoadDispatch", NULL);
+	/* LoadDispatch takes (library, function, arity): strings then an integer.
+	   The restriction string is "<default>;<arg1>;<arg2>;<arg3>". */
+	AddUDFError err = AddUDF(env, "LoadDispatch", "l", 3, 3, "*;s;s;l", Loader, "LoadDispatch", NULL);
 	if (err != AUE_NO_ERROR) { return err; }
 	err = AddUDF(env, "UnLoadDispatch", "l", 2, 2, "s", UnLoader, "UnLoadDispatch", NULL);
 	if (err != AUE_NO_ERROR) { return err; }
@@ -461,6 +526,14 @@ static BuildError LoadErrorRules(Environment* env) {
 		"   =>"
 		"   (modify ?d "
 		"          (error \"Library loaded but the function was not found in it - check the exported function/symbol name\") "
+		"   )"
+		" )", build_result);
+	build_result = build_step(env, ""
+		"(defrule loader-invalid-arity"
+		"   ?d <- (functions (loaded -7))"
+		"   =>"
+		"   (modify ?d "
+		"          (error \"Declared arity is out of range - use -1 for unspecified, or 0..64\") "
 		"   )"
 		" )", build_result);
 	build_result = build_step(env, ""
@@ -554,14 +627,20 @@ BuildError setup_dispatcher(Environment* env) {
 		"    (slot action (type STRING) (default \"load\"))"
 		"    (slot loaded (type INTEGER) (default 0))"
 		"    (slot error (type STRING))"
+		/* Optional declared SHAPE. -1 (the default) means unspecified: the
+		   generated wrapper takes ($?args), so the loader needs to know nothing
+		   about the plugin's signature. A value >= 0 generates a fixed-parameter
+		   wrapper of that arity, which preserves multifield arguments -- see
+		   DefineFuncIfRequired and dispatcher.h. */
+		"    (slot arity (type INTEGER) (default -1))"
 		")", build_result);
 
 	build_result = build_step(env, ""
 		"(defrule loadlib"
-		"   ?d <- (functions (library ?lib) (function ?func) (action \"load\") (loaded 0))"
+		"   ?d <- (functions (library ?lib) (function ?func) (action \"load\") (loaded 0) (arity ?ar))"
 		"   =>"
 		"   (modify ?d "
-		"          (loaded (LoadDispatch ?lib ?func)) "
+		"          (loaded (LoadDispatch ?lib ?func ?ar)) "
 		"   )"
 		" )", build_result);
 	build_result = build_step(env, ""

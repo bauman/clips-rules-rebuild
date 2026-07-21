@@ -26,6 +26,7 @@ static const char* expected_rules[] = {
    "loader-invalid-function-length",
    "loader-load-failed",
    "loader-symbol-not-found",
+   "loader-invalid-arity",
    "loader-name-collision",
    "cleanuplib",
    "cleanup-delete-failed",

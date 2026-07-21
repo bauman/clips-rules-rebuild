@@ -198,31 +198,35 @@ static void amx_matmul_2x4_4x2(const double A[8], const double B[8], double C[4]
 }
 
 /*
- * Read `n` consecutive numeric arguments starting at position `first`.
+ * Read exactly `n` numbers out of a MULTIFIELD argument.
  *
- * NOTE ON THE CALLING CONVENTION -- this is a property of the loader that every
- * plugin author needs to know. The generated wrapper is
+ * THIS PLUGIN DECLARES A SHAPE. Its load fact carries `(arity 2)`, so the loader
+ * generates a fixed-parameter wrapper:
  *
- *     (deffunction MatrixMultiply ($?args) (Dispatch MatrixMultiply (expand$ ?args)))
+ *     (deffunction MatrixMultiply (?a1 ?a2) (Dispatch MatrixMultiply ?a1 ?a2))
  *
- * and a $?args parameter FLATTENS multifields: calling
- *     (MatrixMultiply (create$ 1 2 3 4 5 6 7 8) (create$ 9 10 11 12 13 14 15 16))
- * binds ?args to ONE 16-element multifield, which expand$ then passes as 16
- * separate scalar arguments. A plugin therefore never receives a multifield
- * ARGUMENT through the loader -- only scalars. (It may still RETURN one, which is
- * what this plugin does.)
+ * rather than the default `($?args) ... (expand$ ?args)`. That distinction is
+ * essential here: a $?args parameter FLATTENS multifields, so under the default
+ * wrapper `(MatrixMultiply (create$ ...8...) (create$ ...8...))` arrives as 16
+ * loose scalars with the boundary between the two matrices destroyed. CLIPS
+ * multifields cannot nest, so separate parameters are the ONLY way to receive two
+ * distinct multifields.
  *
- * That is convenient here rather than limiting: callers can pass 16 literals, or
- * two multifield variables, or any mixture, and it all arrives the same way.
+ * The trade: CLIPS now enforces the 2-argument call itself, so a wrong-sized call
+ * is a CLIPS error rather than our FAIL. That is the right split -- "you called
+ * this wrong" is a signature error CLIPS should own, while "this host has no AMX"
+ * is an environment refusal only the plugin can know, and that still comes back
+ * as FAIL. See dispatcher.h.
  */
-static int scalar_numbers(UDFContext *udfc, unsigned int first, unsigned int n, double *dst)
+static int multifield_numbers(UDFValue *v, double *dst, size_t n)
 {
-	UDFValue v;
-	unsigned int i;
+	size_t i;
+	if (v->header->type != MULTIFIELD_TYPE) { return 0; }
+	if (v->range != n) { return 0; }
 	for (i = 0; i < n; i++) {
-		if (!UDFNthArgument(udfc, first + i, ANY_TYPE_BITS, &v)) { return 0; }
-		if (v.header->type == INTEGER_TYPE)     { dst[i] = (double)v.integerValue->contents; }
-		else if (v.header->type == FLOAT_TYPE)  { dst[i] = v.floatValue->contents; }
+		CLIPSValue *e = &v->multifieldValue->contents[v->begin + i];
+		if (e->header->type == INTEGER_TYPE)    { dst[i] = (double)e->integerValue->contents; }
+		else if (e->header->type == FLOAT_TYPE) { dst[i] = e->floatValue->contents; }
 		else { return 0; }
 	}
 	return 1;
@@ -233,6 +237,7 @@ void MatrixMultiply(
 	UDFContext* udfc,
 	UDFValue* out)
 {
+	UDFValue a, b;
 	double A[8], B[8], C[4];
 	MultifieldBuilder *mb;
 	Multifield *mf;
@@ -246,13 +251,14 @@ void MatrixMultiply(
 		return;
 	}
 
-	/* Argument 1 is the dispatch name, so the 16 matrix values occupy 2..17:
-	   A (2x4, row-major) then B (4x2, row-major). Arguments are retrieved
-	   permissively and type-checked here, so a bad call yields FAIL rather than a
-	   hard [ARGACCES2] that halts the deffunction. */
-	if (UDFArgumentCount(udfc) != 17 ||
-	    !scalar_numbers(udfc, 2,  8, A) ||
-	    !scalar_numbers(udfc, 10, 8, B)) {
+	/* Argument 1 is the dispatch name; arguments 2 and 3 are the two matrices,
+	   each an 8-element multifield: A (2x4, row-major) then B (4x2, row-major).
+	   CLIPS has already enforced that there are exactly two of them (declared
+	   arity), so what remains is checking their CONTENT -- still ours to validate,
+	   and still reported as FAIL. Retrieved permissively so a wrong type yields
+	   FAIL rather than a hard [ARGACCES2] that halts the deffunction. */
+	if (!UDFNthArgument(udfc, 2, ANY_TYPE_BITS, &a) || !multifield_numbers(&a, A, 8) ||
+	    !UDFNthArgument(udfc, 3, ANY_TYPE_BITS, &b) || !multifield_numbers(&b, B, 8)) {
 		out->lexemeValue = CreateSymbol(env, "FAIL");
 		return;
 	}
