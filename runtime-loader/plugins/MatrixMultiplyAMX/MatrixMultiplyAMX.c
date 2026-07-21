@@ -1,5 +1,7 @@
 #include "clips.h"
 
+#include <setjmp.h>
+#include <signal.h>
 #include <stdint.h>
 #include <string.h>
 #include <sys/types.h>
@@ -68,44 +70,58 @@
 #define AMX_FMA32(x) AMX_OP_GPR(12, x)
 
 /* ------------------------------------------------------------------ *
- * Environment guard
+ * Environment guard -- PROBE the capability, do not infer it.
  *
- * AMX exists on M1, M2 and M3. It was REMOVED in M4, which replaced it with the
- * architectural SME extension -- so running these encodings on an M4 would fault.
- * Two independent checks, because a SIGILL here takes down the host process:
+ * The obvious guard is to read machdep.cpu.brand_string and allowlist the
+ * families known to have AMX (M1/M2/M3; it was removed in M4 in favour of the
+ * architectural SME extension). That is what this plugin did first, and it was
+ * WRONG -- provably so: CI's macOS arm64 runners report an Apple Silicon brand
+ * string and still SIGILL on the first AMX instruction, because those runners are
+ * VIRTUALISED and the hypervisor does not expose an undocumented coprocessor.
  *
- *   1. an allowlist of brand-string families known to have AMX. Unknown hardware
- *      is REFUSED rather than assumed good, so a future chip fails safe.
- *   2. FEAT_SME, which is the architectural marker of the generation where AMX
- *      went away. Present => refuse, regardless of the brand string.
+ * The CPU model simply does not determine whether these instructions will
+ * execute. Virtualisation, a future silicon revision, or a macOS policy change
+ * can each remove them while the brand string keeps saying "Apple M2". So the
+ * only trustworthy guard is to TRY the instruction and catch the fault:
  *
- * Verified on "Apple M2". M1/M3 are included by family; if you would rather this
- * only ever run on hardware someone has actually tested, delete the entries.
+ *   1. cheap early-out: FEAT_SME present => M4 or later => AMX is gone.
+ *   2. authoritative: execute AMX_SET/AMX_CLR under a SIGILL handler. If it
+ *      faults we siglongjmp out and mark AMX unusable, whatever the reason.
+ *
+ * This is the plugin honouring its half of the loader contract the hard way:
+ * the loader cannot know what silicon a plugin needs, so the plugin must find
+ * out for itself -- and finding out means asking the hardware, not the marketing
+ * string.
+ *
+ * CAVEAT: the probe installs a process-wide SIGILL handler for the duration of
+ * two instructions. It runs exactly once, on first call, and restores the
+ * previous handler immediately. Trigger it from a quiescent point (a plugin's
+ * first use) rather than while other threads are handling their own signals.
  * ------------------------------------------------------------------ */
-static const char *const amx_families[] = { "Apple M1", "Apple M2", "Apple M3" };
+
+static sigjmp_buf amx_probe_jmp;
+
+static void amx_probe_sigill(int sig)
+{
+	(void)sig;
+	siglongjmp(amx_probe_jmp, 1);
+}
 
 /*
  * Computed once and cached. The cache is a plain int: every writer stores the
  * same value, so a race between two first-callers is benign (worst case the
- * check runs twice and agrees). Aligned int stores are atomic on arm64.
+ * probe runs twice and agrees). Aligned int stores are atomic on arm64.
  */
 static int amx_usable(void)
 {
 	static int cached = -1;            /* -1 = not yet determined, 0 = no, 1 = yes */
 	if (cached >= 0) { return cached; }
 
-	char brand[256];
-	size_t size = sizeof(brand);
+	struct sigaction probe_action, saved_action;
 	int result = 0;
-	size_t i;
 
-	if (sysctlbyname("machdep.cpu.brand_string", brand, &size, NULL, 0) != 0) {
-		cached = 0;                    /* cannot identify the CPU -> refuse */
-		return cached;
-	}
-	brand[sizeof(brand) - 1] = '\0';
-
-	/* SME present => M4 or later => AMX has been removed. */
+	/* Cheap early-out: SME present => M4 or later => AMX has been removed. Saves
+	   installing a signal handler on hardware we already know cannot work. */
 	{
 		int has_sme = 0;
 		size_t sme_size = sizeof(has_sme);
@@ -116,10 +132,24 @@ static int amx_usable(void)
 		}
 	}
 
-	for (i = 0; i < sizeof(amx_families) / sizeof(amx_families[0]); i++) {
-		size_t n = strlen(amx_families[i]);
-		if (strncmp(brand, amx_families[i], n) == 0) { result = 1; break; }
+	memset(&probe_action, 0, sizeof(probe_action));
+	probe_action.sa_handler = amx_probe_sigill;
+	sigemptyset(&probe_action.sa_mask);
+	probe_action.sa_flags = 0;
+
+	if (sigaction(SIGILL, &probe_action, &saved_action) != 0) {
+		cached = 0;                    /* cannot install the guard -> refuse */
+		return cached;
 	}
+
+	if (sigsetjmp(amx_probe_jmp, 1) == 0) {
+		AMX_SET();                     /* faults here if AMX is unavailable */
+		AMX_CLR();
+		result = 1;
+	}
+	/* else: we arrived via siglongjmp from the handler; result stays 0 */
+
+	sigaction(SIGILL, &saved_action, NULL);
 
 	cached = result;
 	return cached;
