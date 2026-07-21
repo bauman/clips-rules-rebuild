@@ -356,6 +356,40 @@ void Cleanup(
 	UnDefineFuncIfRequired(env, udfc, out, (const char*)function.lexemeValue->contents);
 }
 
+/*
+ * DispatchLibraryOf -- read-only introspection: which library path currently owns
+ * a given function name? Returns the path as a string, or FALSE if that name is
+ * not loaded.
+ *
+ * Exists so the name-collision (-4) error rule can name the CONFLICTING path
+ * instead of leaving the user to guess. That matters because libraries are
+ * identified by the literal path string: the same file reached by two spellings
+ * ("./lib.so" and "/abs/lib.so") counts as two libraries, and without this the
+ * message reads as though a genuinely different library is involved.
+ */
+void LibraryOf(
+	Environment* env,
+	UDFContext* udfc,
+	UDFValue* out) {
+	UDFValue function;
+	struct function_table* func_exists = NULL;
+
+	if (!UDFNthArgument(udfc, 1, STRING_BIT | SYMBOL_BIT, &function)) {
+		out->lexemeValue = CreateBoolean(env, false);
+		return;
+	}
+	/* Build the CLIPS string while still holding the read lock: libname belongs to
+	   the table entry, which an unload could free once we let go. */
+	lock_read(ensure_lock());
+	HASH_FIND_STR(functions, function.lexemeValue->contents, func_exists);
+	if (func_exists) {
+		out->lexemeValue = CreateString(env, func_exists->libname);
+	} else {
+		out->lexemeValue = CreateBoolean(env, false);
+	}
+	unlock_read(ensure_lock());
+}
+
 void UnLoader(
 	Environment* env,
 	UDFContext* udfc,
@@ -449,7 +483,7 @@ long loader_function_count(void) {
 	return n;
 }
 
-/* Register the four loader UDFs. Returns AUE_NO_ERROR only if all of them were
+/* Register the five loader UDFs. Returns AUE_NO_ERROR only if all of them were
    added; otherwise the first failure (so the caller can refuse to set up a
    dispatcher whose dispatch mechanism is non-functional). */
 AddUDFError LoadUserFunctions(
@@ -462,6 +496,10 @@ AddUDFError LoadUserFunctions(
 	err = AddUDF(env, "UnLoadDispatch", "l", 2, 2, "s", UnLoader, "UnLoadDispatch", NULL);
 	if (err != AUE_NO_ERROR) { return err; }
 	err = AddUDF(env, "CleanupDispatch", "l", 2, 2, "s", Cleanup, "CleanupDispatch", NULL);
+	if (err != AUE_NO_ERROR) { return err; }
+	/* Read-only query used by the -4 error rule to name the conflicting path.
+	   Returns a string (the owning library) or the symbol FALSE. */
+	err = AddUDF(env, "DispatchLibraryOf", "sy", 1, 1, "*;sy", LibraryOf, "DispatchLibraryOf", NULL);
 	if (err != AUE_NO_ERROR) { return err; }
 	err = AddUDF(env, "Dispatch", "*", 1, UNBOUNDED, "*", Dispatcher, "Dispatch", NULL);
 	return err;
@@ -536,12 +574,17 @@ static BuildError LoadErrorRules(Environment* env) {
 		"          (error \"Declared arity is out of range - use -1 for unspecified, or 0..64\") "
 		"   )"
 		" )", build_result);
+	/* Name the CONFLICTING path rather than leaving the user to guess, and state
+	   the identity rule -- because the most common way to hit -4 is not two real
+	   libraries, it is ONE file reached by two spellings. */
 	build_result = build_step(env, ""
 		"(defrule loader-name-collision"
-		"   ?d <- (functions (loaded -4))"
+		"   ?d <- (functions (function ?func) (loaded -4))"
 		"   =>"
 		"   (modify ?d "
-		"          (error \"Function name already loaded from a different library - function names must be unique across libraries\") "
+		"          (error (str-cat \"Function name already loaded from a different library path (\" "
+		"                          (DispatchLibraryOf ?func) "
+		"                          \") - libraries are identified by the literal path string, so the same file under two spellings (./lib.so vs /abs/lib.so) counts as two libraries. Use one consistent spelling, or give the wrappers distinct function names.\")) "
 		"   )"
 		" )", build_result);
 	/* -30/-31 belong to CLEANUP, not unload: unload never touches the wrapper and

@@ -190,6 +190,16 @@ target_link_libraries(test_load_failure_codes dispatcher clips)
 add_test(test_load_failure_codes test_load_failure_codes)
 add_dependencies(test_load_failure_codes cube)
 
+# teardown_dispatcher(): the loader's explicit destructor for its process-global
+# state. Covers the live-environment guard (refuse, and change nothing), that the
+# guard is a COUNT not a flag, that teardown empties the tables, that the loader is
+# REUSABLE afterwards (the shared lock is destroyed and must be rebuilt), and that
+# a repeated teardown is safe.
+add_executable(test_teardown_lifecycle tests/teardown_lifecycle.c)
+target_link_libraries(test_teardown_lifecycle dispatcher clips)
+add_test(test_teardown_lifecycle test_teardown_lifecycle)
+add_dependencies(test_teardown_lifecycle cube)
+
 # The two-tier lifecycle: unload is a non-destructive BOUNCE (library released,
 # wrapper kept, succeeds even while defrules reference the function, reload
 # revives the same wrapper); cleanup is the explicit teardown that retires the
@@ -290,6 +300,9 @@ if (WIN32)
 	add_custom_command(TARGET test_load_failure_codes POST_BUILD
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips> $<TARGET_FILE_DIR:test_load_failure_codes>
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:cube>  $<TARGET_FILE_DIR:test_load_failure_codes>)
+	add_custom_command(TARGET test_teardown_lifecycle POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips> $<TARGET_FILE_DIR:test_teardown_lifecycle>
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:cube>  $<TARGET_FILE_DIR:test_teardown_lifecycle>)
 	add_custom_command(TARGET test_bounce_cleanup POST_BUILD
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips> $<TARGET_FILE_DIR:test_bounce_cleanup>
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:cube>  $<TARGET_FILE_DIR:test_bounce_cleanup>)

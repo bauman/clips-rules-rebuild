@@ -16,10 +16,35 @@
  * table is keyed by name process-wide, so the first library to register a given
  * name owns it until fully unloaded; requesting that name from a different
  * library is refused (the load fact's `loaded` slot is set to -4 and its `error`
- * slot explains). If you wrap two libraries that both export e.g. `Cube`, give
- * the wrappers distinct names (`lib1_Cube`, `lib2_Cube`) -- the exported symbol
- * must have the CLIPS UDF signature `void name(Environment*, UDFContext*,
- * UDFValue*)`, so the wrapper author already controls the name.
+ * slot names the library that currently owns it). If you wrap two libraries that
+ * both export e.g. `Cube`, give the wrappers distinct names (`lib1_Cube`,
+ * `lib2_Cube`) -- the exported symbol must have the CLIPS UDF signature
+ * `void name(Environment*, UDFContext*, UDFValue*)`, so the wrapper author
+ * already controls the name.
+ *
+ * CONSTRAINT -- a library is identified by the LITERAL PATH STRING you pass, and
+ * nothing else. No canonicalisation is performed. So:
+ *
+ *     (functions (library "./libcube.so")     (function "Cube"))
+ *     (functions (library "/opt/x/libcube.so") (function "Cube"))
+ *
+ * are TWO libraries as far as the loader is concerned, even when they are the
+ * same file -- the second is refused with -4, and the library is dlopen'd twice.
+ * Use ONE consistent spelling for a given library across your whole rule base.
+ *
+ * This is deliberate, and it is worth being explicit about why there is no guard:
+ * path canonicalisation cannot be made correct, so a partial attempt would only
+ * create a false sense of protection. `realpath()` would collapse the case above
+ * and would also resolve SYMLINKS -- but hard links, bind mounts, and separate
+ * identical copies all still produce distinct paths for the same content, and
+ * keying on filesystem identity (device + inode) would catch hard links yet still
+ * miss copies. More fundamentally, path identity is not library identity at all
+ * in a system that supports hot updates: replacing the file at a fixed path (see
+ * the bounce, below) deliberately changes the code behind an unchanged path.
+ * There is no stable answer to "is this the same library?", so the loader does not
+ * pretend to compute one. Passing a consistent path is the caller's
+ * responsibility; the -4 diagnostic names the conflicting path to make a mismatch
+ * obvious.
  *
  * TWO LIFETIMES -- understand these before calling teardown_dispatcher():
  *

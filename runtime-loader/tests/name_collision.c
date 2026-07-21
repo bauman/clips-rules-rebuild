@@ -71,6 +71,49 @@ int main(void)
    /* original must still dispatch into the first library */
    if (eval_int(env, "(Cube 3)") != 27) { fprintf(stderr, "FAIL: original Cube broke after collision\n"); failures++; }
 
+   /* PATH IDENTITY: a library is keyed by the literal path string, so the SAME
+      file under a second spelling is treated as a different library and refused.
+      This is documented behaviour (dispatcher.h), not a bug -- canonicalisation
+      cannot be made correct, so the loader does not attempt it. Asserted here so
+      the documented rule stays true. */
+   {
+      char abs[1200];
+      char fact[1400];
+      CLIPSValue rv;
+      if (realpath(CUBE_LIB, abs) == NULL)
+        {
+         /* Never silently skip: ctest runs us from the directory holding the
+            plugin, so this resolving is part of the contract being tested. */
+         fprintf(stderr, "FAIL: could not realpath %s (wrong working directory?)\n", CUBE_LIB);
+         failures++;
+        }
+      else
+        {
+         snprintf(fact, sizeof fact,
+                  "(functions (library \"%s\") (function \"Cube\"))", abs);
+         AssertString(env, fact);
+         if (run_bounded(env, 10, 6, "same file, absolute spelling") < 0) { return 1; }
+
+         if (Eval(env, "(do-for-fact ((?f functions)) (eq ?f:library \"" CUBE_LIB "\") ?f:loaded)", &rv) != EE_NO_ERROR
+             || rv.header->type != INTEGER_TYPE || rv.integerValue->contents != 1)
+           { fprintf(stderr, "FAIL: the original relative-path load should still be loaded\n"); failures++; }
+
+         snprintf(fact, sizeof fact,
+                  "(do-for-fact ((?f functions)) (eq ?f:library \"%s\") ?f:loaded)", abs);
+         if (Eval(env, fact, &rv) != EE_NO_ERROR
+             || rv.header->type != INTEGER_TYPE || rv.integerValue->contents != -4)
+           { fprintf(stderr, "FAIL: same file under an absolute spelling should be refused with -4\n"); failures++; }
+
+         /* and the diagnostic must NAME the conflicting path, so the user can see
+            it is the same file rather than guessing */
+         snprintf(fact, sizeof fact,
+                  "(do-for-fact ((?f functions)) (eq ?f:library \"%s\") ?f:error)", abs);
+         if (Eval(env, fact, &rv) != EE_NO_ERROR || rv.header->type != STRING_TYPE
+             || strstr(rv.lexemeValue->contents, CUBE_LIB) == NULL)
+           { fprintf(stderr, "FAIL: the -4 error should name the owning library path\n"); failures++; }
+        }
+   }
+
    DestroyEnvironment(env);
 
    if (failures) { fprintf(stderr, "%d failure(s)\n", failures); return 1; }
