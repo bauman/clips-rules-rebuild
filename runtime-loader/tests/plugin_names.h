@@ -31,14 +31,20 @@
 #  define HOTSWAP_LIB "./libhotswap.so"
 #endif
 
-/* The assembly-backed IsOdd plugin is aarch64/arm64-only, but that includes
-   Windows/ARM64 (armasm64 core), so it needs a name on every platform. */
+/* The assembly-backed plugins (IsOdd, IsPrime) build on aarch64 and x86-64, on
+   both POSIX and Windows toolchains, so they need a name on every platform. */
 #ifdef WIN32
-#  define ISODD_LIB "isodd.dll"
+#  define ISODD_LIB  "isodd.dll"
+#  define ISPRIME_LIB "isprime.dll"
+#  define MATMUL_LIB  "matrixmultiply.dll"
 #elif defined(__APPLE__)
-#  define ISODD_LIB "./libisodd.dylib"
+#  define ISODD_LIB  "./libisodd.dylib"
+#  define ISPRIME_LIB "./libisprime.dylib"
+#  define MATMUL_LIB  "./libmatrixmultiply.dylib"
 #else
-#  define ISODD_LIB "./libisodd.so"
+#  define ISODD_LIB  "./libisodd.so"
+#  define ISPRIME_LIB "./libisprime.so"
+#  define MATMUL_LIB  "./libmatrixmultiply.so"
 #endif
 
 #endif

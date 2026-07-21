@@ -46,10 +46,18 @@ endif ()
 # copyable template (sources + CMakeLists). This file only decides WHICH plugins
 # are included; how each one is built lives with it.
 #
-#   Cube  -- plain C, exports Cube + Square; also builds cube2 from the same source
-#            so two distinct libraries export the same names (name-collision tests).
-#   IsOdd -- assembly-backed; picks a per-(arch, toolchain) core and builds nothing
-#            on architectures it has no core for.
+#   Cube           -- plain C, exports Cube + Square; also builds cube2 from the
+#                     same source so two distinct libraries export the same names
+#                     (name-collision tests).
+#   CubeForTesting -- TEST FIXTURE, deliberately wrong; makes a hot update
+#                     observable. Not an example to copy.
+#   IsOdd          -- assembly-backed, minimal: one masking instruction.
+#   IsPrime        -- assembly-backed, realistic: branches, a loop, multiply and
+#                     integer division -- and on x86-64 the two ABIs need
+#                     different register allocation, not just different syntax.
+#
+# The assembly plugins pick a per-(arch, toolchain) core and build nothing on
+# architectures they have no core for.
 #
 # Because a plugin may decline to build, detect it afterwards with `if (TARGET x)`:
 # targets are global across directories, whereas variables set in a subdirectory do
@@ -67,6 +75,8 @@ set(RUNTIME_LOADER_PLUGIN_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}")
 add_subdirectory(plugins/Cube)
 add_subdirectory(plugins/CubeForTesting)
 add_subdirectory(plugins/IsOdd)
+add_subdirectory(plugins/IsPrime)
+add_subdirectory(plugins/MatrixMultiplyAMX)
 
 # --- standalone CLI application ---
 add_executable(runtime-clips app/main.c)
@@ -226,6 +236,24 @@ if (TARGET isodd)
 	add_dependencies(test_isodd isodd)
 endif ()
 
+# Apple Silicon only: the AMX coprocessor example. The test checks the result
+# against a plain-C reference rather than hardcoded numbers, because the plugin
+# drives undocumented hardware through reverse-engineered encodings.
+if (TARGET matrixmultiply)
+	add_executable(test_matrixmultiply tests/matrixmultiply.c)
+	target_link_libraries(test_matrixmultiply dispatcher clips)
+	add_test(test_matrixmultiply test_matrixmultiply)
+	add_dependencies(test_matrixmultiply matrixmultiply)
+endif ()
+
+# The richer assembly example: branches, a loop, multiply and integer division.
+if (TARGET isprime)
+	add_executable(test_isprime tests/isprime.c)
+	target_link_libraries(test_isprime dispatcher clips)
+	add_test(test_isprime test_isprime)
+	add_dependencies(test_isprime isprime)
+endif ()
+
 if (WIN32)
 	# no rpath on windows: copy clips.dll next to each exe, and the plugin DLLs
 	# next to the test exes that LoadLibrary them at runtime, so they resolve.
@@ -275,6 +303,11 @@ if (WIN32)
 		add_custom_command(TARGET test_isodd POST_BUILD
 			COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips> $<TARGET_FILE_DIR:test_isodd>
 			COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:isodd> $<TARGET_FILE_DIR:test_isodd>)
+	endif ()
+	if (TARGET isprime)
+		add_custom_command(TARGET test_isprime POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips>   $<TARGET_FILE_DIR:test_isprime>
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:isprime> $<TARGET_FILE_DIR:test_isprime>)
 	endif ()
 	add_custom_command(TARGET runtime-clips POST_BUILD
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:clips> $<TARGET_FILE_DIR:runtime-clips>)
